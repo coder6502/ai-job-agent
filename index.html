@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Job Agent — Enterprise Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* PRECISE SPREAD PRODUCTION DESIGN SYSTEM */
+:root {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --color-text-primary: #f3f4f6;
+  --color-text-secondary: #9ca3af;
+  --color-border-secondary: rgba(255, 255, 255, 0.08);
+  --color-border-tertiary: rgba(255, 255, 255, 0.04);
+  --color-background-primary: #111827;
+  --color-background-secondary: #1f2937;
+  --brand-primary: #3b82f6;
+  --brand-glow: rgba(59, 130, 246, 0.12);
+  --border-radius-md: 8px;
+  --border-radius-lg: 14px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px;background:#0b0f19;min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+/* HIGH-FIDELITY PRODUCTION AUTH SCREEN */
+#auth-viewport {
+  position: fixed;
+  inset: 0;
+  background: #070a12;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-ambient-1 {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, rgba(0,0,0,0) 70%);
+  top: -10%;
+  left: -10%;
+}
+.auth-ambient-2 {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, rgba(0,0,0,0) 70%);
+  bottom: -10%;
+  right: -10%;
+}
+.auth-frame {
+  background: rgba(17, 24, 39, 0.8);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 20px;
+  padding: 3rem 2.5rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 10;
+}
+.auth-header { text-align: center; margin-bottom: 2rem; }
+.auth-subtitle { font-size: 13px; color: var(--color-text-secondary); margin-top: 6px; }
+
+/* MAIN APPLICATION WORKSPACE FRAME */
+.app{max-width:680px;margin:0 auto;padding:2rem 1rem;display:none}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem}
+.logo{font-size:20px;font-weight:700;letter-spacing:-0.03em}
+.logo span{color:var(--brand-primary)}
+.agent-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-secondary);background:rgba(255,255,255,0.02);padding:6px 14px;border-radius:30px;border:1px solid var(--color-border-secondary)}
+
+.dot{width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);animation: pulseGlow 2s infinite ease-in-out}
+.dot.off{background:#64748b;box-shadow:none;animation:none}
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.92); }
+}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--color-border-tertiary);margin-bottom:2rem;overflow-x:auto;padding-bottom:2px}
+.tab{padding:10px 16px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--font-sans);display:flex;align-items:center;gap:6px;transition:all 0.2s ease}
+.tab:hover{color:var(--color-text-primary)}
+.tab.active{color:var(--brand-primary);font-weight:600;border-bottom-color:var(--brand-primary)}
+
+.panel{display:none;animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;}
+.panel.active{display:block}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card{background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1.5rem;margin-bottom:1.25rem;box-shadow: 0 4px 20px rgba(0,0,0,0.2);transition: border-color 0.25s ease, box-shadow 0.25s ease;}
+.card:hover{border-color:rgba(59, 130, 246, 0.25);box-shadow: 0 8px 30px rgba(0,0,0,0.3);}
+
+.mg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
+.m{background:rgba(255,255,255,0.01);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:1rem;text-align:center;transition:transform 0.2s ease}
+.m:hover{transform:translateY(-2px);background:rgba(255,255,255,0.03)}
+.mv{font-size:24px;font-weight:700;letter-spacing:-0.02em}
+.ml{font-size:11px;color:var(--color-text-secondary);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em}
+
+.badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;letter-spacing:0.02em}
+.bg{background:rgba(59,130,246,0.15);color:#60a5fa}
+.by{background:rgba(245,158,11,0.15);color:#fbbf24}
+.bgr{background:rgba(16,185,129,0.15);color:#34d399}
+.br{background:rgba(239,68,68,0.15);color:#f87171}
+.bgy{background:rgba(255,255,255,0.05);color:var(--color-text-secondary)}
+
+input,select,textarea{width:100%;padding:10px 14px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:13px;background:rgba(0,0,0,0.2);color:var(--color-text-primary);font-family:var(--font-sans);outline:none;transition:all 0.2s ease}
+input:focus,select:focus,textarea:focus{border-color:var(--brand-primary);box-shadow: 0 0 0 3px var(--brand-glow)}
+textarea{resize:vertical;min-height:80px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.fl{margin-bottom:12px}
+.fl label{font-size:12px;color:var(--color-text-secondary);display:block;margin-bottom:6px;font-weight:500}
+
+btn,button{padding:9px 18px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:rgba(255,255,255,0.03);color:var(--color-text-primary);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1)}
+button:hover{background:rgba(255,255,255,0.08);transform:translateY(-1px)}
+.bp{background:var(--brand-primary);color:#fff;border-color:var(--brand-primary);box-shadow: 0 4px 12px rgba(59,130,246,0.25)}
+.bp:hover{background:#2563eb;box-shadow: 0 6px 20px rgba(59,130,246,0.4)}
+.bd{background:rgba(239,68,68,0.1);color:#f87171;border-color:rgba(239,68,68,0.2)}
+.bd:hover{background:rgba(239,68,68,0.2)}
+
+.sec{font-size:11px;font-weight:700;color:var(--color-text-secondary);margin-bottom:.875rem;text-transform:uppercase;letter-spacing:.08em}
+.shd{display:flex;justify-content:space-between;align-items:center;margin-bottom:.875rem}
+
+.job-card{border:1px solid var(--color-border-tertiary);background:rgba(255,255,255,0.005);border-radius:var(--border-radius-md);padding:1.25rem;margin-bottom:.75rem;transition:all 0.25s cubic-bezier(0.16, 1, 0.3, 1)}
+.job-card:hover{border-color:var(--brand-primary);background:rgba(59, 130, 246, 0.02);transform:scale(1.005) translateX(2px)}
+.jc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.jc-co{font-weight:600;font-size:15px;letter-spacing:-0.01em}
+.jc-role{font-size:13px;color:var(--color-text-secondary);margin-bottom:6px}
+.jc-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.jc-bot{display:flex;justify-content:space-between;align-items:center}
+.match-ring{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;border:2.5px solid}
+
+.chip{display:inline-block;font-size:12px;padding:6px 14px;border-radius:30px;border:1px solid var(--color-border-secondary);background:rgba(255,255,255,0.01);cursor:pointer;margin:4px;color:var(--color-text-secondary);transition:all 0.2s ease}
+.chip:hover{background:var(--brand-glow);color:var(--color-text-primary);border-color:var(--brand-primary);transform:translateY(-1px)}
+
+.tog{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--color-border-tertiary)}
+.tog:last-child{border-bottom:none}
+.tog-label{font-size:13px;font-weight:500}
+.tog-sub{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.switch{position:relative;width:40px;height:22px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,0.08);border-radius:22px;border:1px solid var(--color-border-secondary);transition:.25s cubic-bezier(0.16, 1, 0.3, 1)}
+.slider:before{position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;background:var(--color-text-secondary);border-radius:50%;transition:.25s cubic-bezier(0.16, 1, 0.3, 1)}
+input:checked+.slider{background:var(--brand-primary);border-color:var(--brand-primary)}
+input:checked+.slider:before{transform:translateX(18px);background:white}
+
+.ai-box{background:rgba(255,255,255,0.02);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;font-size:13px;line-height:1.65;margin-bottom:.75rem;white-space:pre-wrap}
+.u-box{background:var(--brand-primary);color:#fff;border-radius:var(--border-radius-lg);padding:1rem 1.25rem;font-size:13px;line-height:1.65;margin-bottom:.75rem;box-shadow: 0 4px 12px rgba(59,130,246,0.2)}
+.ci{display:flex;gap:8px;margin-top:1rem}
+.ci input{flex:1}
+.pbar{height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-top:6px}
+.pfill{height:100%;border-radius:3px;transition:width .5s cubic-bezier(0.16, 1, 0.3, 1)}
+.log-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--color-border-tertiary);font-size:12px}
+.log-item:last-child{border-bottom:none}
+.log-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.profile-complete{display:flex;align-items:center;gap:16px;padding:1.25rem;background:rgba(255,255,255,0.01);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);margin-bottom:1.25rem}
+.pc-bar{flex:1}
+.pc-label{font-size:13px;font-weight:600;margin-bottom:4px}
+.tag-inp{display:flex;gap:8px;margin-bottom:8px}
+.tag-inp input{flex:1}
+.tags-list{display:flex;flex-wrap:wrap;gap:6px;min-height:28px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 12px;border-radius:20px;background:rgba(255,255,255,0.03);border:1px solid var(--color-border-secondary);animation: tagPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)}
+@keyframes tagPop { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+.tag button{border:none;background:none;cursor:pointer;font-size:14px;color:var(--color-text-secondary);line-height:1}
+.tag button:hover{color:#f87171}
+.empty{text-align:center;padding:2.5rem;color:var(--color-text-secondary);font-size:13px}
+#toast{position:fixed;bottom:24px;right:24px;background:var(--color-background-primary);border:1px solid var(--color-border-secondary);color:#fff;padding:12px 24px;border-radius:var(--border-radius-md);font-size:13px;opacity:0;transition:all 0.3s cubic-bezier(0.16, 1, 0.3, 1);pointer-events:none;z-index:99999;box-shadow: 0 10px 30px rgba(0,0,0,0.4);transform: translateY(12px);}
+#toast.show{opacity: 1; transform: translateY(0);}
+</style>
+</head>
+<body>
+
+<div id="auth-viewport">
+  <div class="auth-ambient-1"></div>
+  <div class="auth-ambient-2"></div>
+  <div class="auth-frame">
+    <div class="auth-header">
+      <div class="logo"><span>AI</span>JobAgent</div>
+      <div class="auth-subtitle">Enterprise Workspace Terminal</div>
+    </div>
+    <div class="fl">
+      <label>Email Address</label>
+      <input type="email" id="auth-email" placeholder="name@domain.com">
+    </div>
+    <div class="fl">
+      <label>Password</label>
+      <input type="password" id="auth-pwd" placeholder="••••••••">
+    </div>
+    <div style="display:flex; gap:12px; margin-top:2rem;">
+      <button class="bp" onclick="handleLogin()" style="flex:1; padding:11px 0;">Log In</button>
+      <button onclick="handleSignUp()" style="flex:1; padding:11px 0;">Sign Up</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="main-application">
+  <div class="topbar">
+    <div class="logo"><span>AI</span>JobAgent</div>
+    <div class="agent-status">
+      <div class="dot" id="agent-dot"></div>
+      <span id="agent-lbl">Agent active</span>
+      <button onclick="toggleAgent()" style="font-size:11px;padding:3px 10px;margin-left:4px" id="agent-btn">Pause</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="sw('dash')"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard</button>
+    <button class="tab" onclick="sw('profile')"><i class="ti ti-user" aria-hidden="true"></i> My profile</button>
+    <button class="tab" onclick="sw('jobs')"><i class="ti ti-search" aria-hidden="true"></i> Job matches</button>
+    <button class="tab" onclick="sw('applied')"><i class="ti ti-send" aria-hidden="true"></i> Applied</button>
+    <button class="tab" onclick="sw('settings')"><i class="ti ti-settings" aria-hidden="true"></i> Settings</button>
+    <button class="tab" onclick="sw('ai')"><i class="ti ti-robot" aria-hidden="true"></i> AI chat</button>
+  </div>
+
+  <div class="panel active" id="p-dash">
+    <div class="mg" id="dash-metrics"></div>
+    <div class="card">
+      <div class="shd"><span class="sec">Agent activity today</span><span id="last-scan" style="font-size:11px;color:var(--color-text-secondary)"></span></div>
+      <div id="agent-log"></div>
+    </div>
+    <div class="card">
+      <div class="shd"><span class="sec">Top matches right now</span><button onclick="sw('jobs')" style="font-size:11px">See all</button></div>
+      <div id="dash-jobs"></div>
+    </div>
+    <div class="card" style="background:var(--color-background-secondary);border:none">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px">Quick actions</div>
+      <div>
+        <span class="chip" onclick="sendPrompt('Find me the best software engineering internships and entry level jobs in India right now for a CS/IT/ECE student')">Find jobs now ↗</span>
+        <span class="chip" onclick="sendPrompt('Write a cold email to a recruiter at a top tech company in India for a software engineering internship')">Cold email ↗</span>
+        <span class="chip" onclick="sendPrompt('Analyze my rejection pattern and tell me what I should change in my applications to get more interview calls')">Fix rejections ↗</span>
+        <span class="chip" onclick="sendPrompt('What are the top 20 companies hiring freshers and interns in India for software engineering roles in 2025-2026?')">Top companies ↗</span>
+        <span class="chip" onclick="sendPrompt('Give me a complete 90-day plan to go from no job to landing a software engineering internship or job')">90-day plan ↗</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="p-profile">
+    <div class="profile-complete">
+      <div class="pc-bar">
+        <div class="pc-label">Profile completeness — <span id="pc-pct">0</span>%</div>
+        <div class="pbar"><div class="pfill" id="pc-fill" style="background:#3b82f6;width:0%"></div></div>
+      </div>
+      <span class="badge bg" id="pc-badge">Incomplete</span>
+    </div>
+
+    <div class="card">
+      <div class="sec">Personal info</div>
+      <div class="row2">
+        <div class="fl"><label>Full name</label><input id="p-name" placeholder="Your full name" oninput="calcPc()"></div>
+        <div class="fl"><label>Email</label><input id="p-email" placeholder="your@email.com" oninput="calcPc()"></div>
+      </div>
+      <div class="row2">
+        <div class="fl"><label>Phone</label><input id="p-phone" placeholder="+91 XXXXXXXXXX" oninput="calcPc()"></div>
+        <div class="fl"><label>Location</label><input id="p-loc" placeholder="City, State" oninput="calcPc()"></div>
+      </div>
+      <div class="fl"><label>LinkedIn URL</label><input id="p-li" placeholder="linkedin.com/in/yourname" oninput="calcPc()"></div>
+      <div class="fl"><label>GitHub / portfolio URL</label><input id="p-gh" placeholder="github.com/yourname" oninput="calcPc()"></div>
+    </div>
+
+    <div class="card">
+      <div class="sec">Education</div>
+      <div class="row3">
+        <div class="fl"><label>Degree</label><select id="p-deg" onchange="calcPc()"><option value="">Select</option><option>B.Tech</option><option>B.E.</option><option>MCA</option><option>M.Tech</option><option>BCA</option><option>BSc CS</option></select></div>
+        <div class="fl"><label>Branch</label><select id="p-branch" onchange="calcPc()"><option value="">Select</option><option>Computer Science</option><option>Information Technology</option><option>Electronics & Communication</option><option>Electrical</option><option>Mechanical</option></select></div>
+        <div class="fl"><label>Graduation year</label><select id="p-yr" onchange="calcPc()"><option value="">Select</option><option>2025</option><option>2026</option><option>2027</option><option>2028</option></select></div>
+      </div>
+      <div class="row2">
+        <div class="fl"><label>College name</label><input id="p-col" placeholder="College / University" oninput="calcPc()"></div>
+        <div class="fl"><label>CGPA / percentage</label><input id="p-cgpa" placeholder="e.g. 8.2 CGPA or 78%" oninput="calcPc()"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec">Skills</div>
+      <div class="tag-inp">
+        <input id="skill-in" placeholder="Add skill (e.g. Python, React, SQL) and press Add">
+        <button onclick="addTag('skill-in','skills-list','skills')" style="white-space:nowrap">Add</button>
+      </div>
+      <div class="tags-list" id="skills-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="sec">Job preferences</div>
+      <div class="row2">
+        <div class="fl"><label>Role type</label><select id="p-rtype" onchange="calcPc()"><option value="">Select</option><option>Internship</option><option>Full-time</option><option>Both</option></select></div>
+        <div class="fl"><label>Work mode</label><select id="p-wmode" onchange="calcPc()"><option value="">Select</option><option>Remote</option><option>On-site</option><option>Hybrid</option><option>Any</option></select></div>
+      </div>
+      <div class="fl"><label>Preferred locations</label>
+        <div class="tag-inp">
+          <input id="loc-in" placeholder="Add city (e.g. Pune, Bangalore, Mumbai)">
+          <button onclick="addTag('loc-in','locs-list','locs')">Add</button>
+        </div>
+        <div class="tags-list" id="locs-list"></div>
+      </div>
+      <div class="fl"><label>Target companies / sectors</label>
+        <div class="tag-inp">
+          <input id="co-in" placeholder="e.g. Infosys, Startups, Product companies">
+          <button onclick="addTag('co-in','cos-list','cos')">Add</button>
+        </div>
+        <div class="tags-list" id="cos-list"></div>
+      </div>
+      <div class="fl"><label>Resume summary (paste or write)</label><textarea id="p-summary" placeholder="Your professional summary — AI will use this for cover letters and applications..." oninput="calcPc()"></textarea></div>
+    </div>
+
+    <button class="bp" onclick="saveProfile()" style="width:100%">Save profile &amp; activate agent</button>
+  </div>
+
+  <div class="panel" id="p-jobs">
+    <div class="card" style="padding:.75rem 1rem">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="jf-type" onchange="renderJobs()" style="width:auto;font-size:12px;padding:4px 8px"><option value="">All types</option><option>Internship</option><option>Full-time</option></select>
+        <button onclick="addJobPrompt()" style="font-size:12px;margin-left:auto"><i class="ti ti-plus" aria-hidden="true"></i> Add Job</button>
+        <button onclick="simulateScan()" style="font-size:12px;"><i class="ti ti-refresh" aria-hidden="true"></i> Scan now</button>
+      </div>
+    </div>
+    
+    <div id="add-job-form" style="display:none">
+      <div class="card">
+        <div class="sec">Add job manually</div>
+        <div class="row2">
+          <div class="fl"><label>Company</label><input id="aj-co" placeholder="e.g. Stripe"></div>
+          <div class="fl"><label>Role</label><input id="aj-role" placeholder="e.g. Backend Engineer"></div>
+        </div>
+        <div class="row2">
+          <div class="fl"><label>Location</label><input id="aj-loc" placeholder="Bangalore / Remote"></div>
+          <div class="fl"><label>Type</label>
+            <select id="aj-type"><option>Internship</option><option>Full-time</option></select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="bp" onclick="saveJob()">Save Securely</button>
+          <button onclick="document.getElementById('add-job-form').style.display='none'">Cancel</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="jobs-list"></div>
+  </div>
+
+  <div class="panel" id="p-applied">
+    <div class="mg" id="app-metrics"></div>
+    <div class="card">
+      <div class="shd">
+        <span class="sec">All applications</span>
+        <select id="af-status" onchange="renderApplied()" style="width:auto;font-size:12px;padding:4px 8px">
+          <option value="">All</option><option>Auto-applied</option><option>Manually applied</option><option>Interview</option><option>Rejected</option><option>Offered</option>
+        </select>
+      </div>
+      <div id="applied-list"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="p-settings">
+    <div class="card">
+      <div class="sec">Auto-apply settings</div>
+      <div class="tog">
+        <div><div class="tog-label">Auto-apply mode</div><div class="tog-sub">Agent applies automatically without asking you</div></div>
+        <label class="switch"><input type="checkbox" id="s-auto" onchange="saveSett()"><span class="slider"></span></label>
+      </div>
+      <div class="tog">
+        <div><div class="tog-label">Approval mode</div><div class="tog-sub">Agent finds jobs, you approve each one before applying</div></div>
+        <label class="switch"><input type="checkbox" id="s-approve" checked onchange="saveSett()"><span class="slider"></span></label>
+      </div>
+      <div class="tog">
+        <div><div class="tog-label">Daily digest notification</div><div class="tog-sub">Morning summary of matches found and applied</div></div>
+        <label class="switch"><input type="checkbox" id="s-digest" checked onchange="saveSett()"><span class="slider"></span></label>
+      </div>
+      <div class="tog">
+        <div><div class="tog-label">Referral detection</div><div class="tog-sub">Flag jobs where you have a LinkedIn connection</div></div>
+        <label class="switch"><input type="checkbox" id="s-ref" checked onchange="saveSett()"><span class="slider"></span></label>
+      </div>
+      <div class="tog">
+        <div><div class="tog-label">Smart resume switching</div><div class="tog-sub">Auto-select best resume variant per job</div></div>
+        <label class="switch"><input type="checkbox" id="s-rsm" checked onchange="saveSett()"><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec">Search platforms</div>
+      <div class="tog"><div><div class="tog-label">LinkedIn</div></div><label class="switch"><input type="checkbox" id="s-li" checked onchange="saveSett()"><span class="slider"></span></label></div>
+      <div class="tog"><div><div class="tog-label">Naukri</div></div><label class="switch"><input type="checkbox" id="s-nk" checked onchange="saveSett()"><span class="slider"></span></label></div>
+      <div class="tog"><div><div class="tog-label">Internshala</div></div><label class="switch"><input type="checkbox" id="s-is" checked onchange="saveSett()"><span class="slider"></span></label></div>
+      <div class="tog"><div><div class="tog-label">Wellfound (AngelList)</div></div><label class="switch"><input type="checkbox" id="s-wf" onchange="saveSett()"><span class="slider"></span></label></div>
+      <div class="tog"><div><div class="tog-label">Company career pages</div></div><label class="switch"><input type="checkbox" id="s-cc" checked onchange="saveSett()"><span class="slider"></span></label></div>
+    </div>
+  </div>
+
+  <div class="panel" id="p-ai">
+    <div class="card">
+      <div class="sec">AI career assistant</div>
+      <div id="chat-msgs">
+        <div class="ai-box">Hi! I'm your AI job agent. I can track your pipelines, match profiles across tables, and secure records automatically. What do you need help with?</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:8px">
+        <span class="chip" onclick="qa('Why am I not getting responses to my applications? How do I fix this?')">Why no responses? ↗</span>
+        <span class="chip" onclick="qa('Write me a tailored cover letter for a software engineering internship at a product-based company in India')">Cover letter ↗</span>
+      </div>
+      <div class="ci">
+        <input id="chat-in" placeholder="Ask anything about your job search..." onkeydown="if(event.key==='Enter')doChat()">
+        <button class="bp" onclick="doChat()">Send ↗</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// --- SECURE INFRASTRUCTURE CONNECTIVITY TARGETS ---
+const SUPABASE_URL = "https://isfphonwyfujovmxpfcp.supabase.co"; 
+const SUPABASE_ANON_KEY = "sb_publishable_ogsRWUUMfI7Rzh3s4d4xKA_ewWbxGwQ";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUserInstance = null;
+
+let state={
+  agentOn:true,
+  profile:{},
+  skills:[],locs:[],cos:[],
+  jobs:[],
+  agentLog:[
+    {type:'system',msg:'Core systems connected to enterprise cluster securely.',time:'Now',color:'#3b82f6'}
+  ]
+};
+
+// --- AUTHENTICATION ACTION CONTROLLERS ---
+async function handleSignUp() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-pwd').value.trim();
+  if(!email || !password) return toast("Provide mandatory account fields.");
+  
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) return toast(error.message);
+  toast("Registration complete! Check verification email link.");
+}
+
+async function handleLogin() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-pwd').value.trim();
+  if(!email || !password) return toast("Provide account credentials.");
+  
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return toast(error.message);
+  
+  currentUserInstance = data.user;
+  document.getElementById('auth-viewport').style.display = 'none';
+  document.getElementById('main-application').style.display = 'block';
+  toast("Authentication pass. Synchronizing data logs...");
+  
+  await pullStateFromCloud();
+  await pullProfileFromCloud();
+}
+
+async function pullStateFromCloud() {
+  if (!currentUserInstance) return;
+  
+  const { data, error } = await supabaseClient
+    .from('user_jobs')
+    .select('*')
+    .order('created_at', { ascending: false });
+    
+  if (!error && data) {
+    state.jobs = data;
+    renderJobs();
+    renderApplied();
+    renderDash();
+  }
+}
+
+async function pullProfileFromCloud() {
+  if (!currentUserInstance) return;
+  
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .select('*')
+    .eq('id', currentUserInstance.id)
+    .single();
+    
+  if (!error && data) {
+    document.getElementById('p-name').value = data.name || '';
+    document.getElementById('p-email').value = data.email || '';
+    document.getElementById('p-phone').value = data.phone || '';
+    document.getElementById('p-loc').value = data.location || '';
+    document.getElementById('p-li').value = data.linkedin_url || '';
+    document.getElementById('p-gh').value = data.github_url || '';
+    document.getElementById('p-deg').value = data.degree || '';
+    document.getElementById('p-branch').value = data.branch || '';
+    document.getElementById('p-yr').value = data.grad_year || '';
+    document.getElementById('p-col').value = data.college || '';
+    document.getElementById('p-cgpa').value = data.cgpa || '';
+    document.getElementById('p-rtype').value = data.role_type || '';
+    document.getElementById('p-wmode').value = data.work_mode || '';
+    document.getElementById('p-summary').value = data.summary || '';
+    
+    state.skills = data.skills || [];
+    renderTag('skills-list', 'skills');
+    calcPc();
+  }
+}
+
+async function saveProfile() {
+  if (!currentUserInstance) return toast("An active login session is required.");
+  
+  const profilePayload = {
+    id: currentUserInstance.id,
+    name: document.getElementById('p-name').value.trim(),
+    email: document.getElementById('p-email').value.trim(),
+    phone: document.getElementById('p-phone').value.trim(),
+    location: document.getElementById('p-loc').value.trim(),
+    linkedin_url: document.getElementById('p-li').value.trim(),
+    github_url: document.getElementById('p-gh').value.trim(),
+    degree: document.getElementById('p-deg').value,
+    branch: document.getElementById('p-branch').value,
+    grad_year: document.getElementById('p-yr').value,
+    college: document.getElementById('p-col').value.trim(),
+    cgpa: document.getElementById('p-cgpa').value.trim(),
+    role_type: document.getElementById('p-rtype').value,
+    work_mode: document.getElementById('p-wmode').value,
+    summary: document.getElementById('p-summary').value.trim(),
+    skills: state.skills, 
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabaseClient.from('profiles').upsert(profilePayload);
+    
+  if (error) {
+    toast("Profile sync failure: " + error.message);
+  } else {
+    toast("Cloud credentials updated and locked.");
+    state.agentLog.unshift({
+      type: 'system',
+      msg: 'User profile records updated securely inside database cluster.',
+      time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+      color: '#3b82f6'
+    });
+    renderDash();
+  }
+}
+
+async function saveJob() {
+  const co = document.getElementById('aj-co').value.trim();
+  const role = document.getElementById('aj-role').value.trim();
+  if(!co||!role) return toast('Fields cannot remain empty');
+  
+  const newJob = {
+    user_id: currentUserInstance.id,
+    company: co,
+    role: role,
+    type: document.getElementById('aj-type').value,
+    location: document.getElementById('aj-loc').value || 'Remote',
+    match_score: Math.floor(Math.random() * (98 - 75 + 1)) + 75,
+    status: 'Pending'
+  };
+
+  const { data, error } = await supabaseClient.from('user_jobs').insert([newJob]).select();
+  if (error) {
+    toast("Sync failed: " + error.message);
+  } else {
+    document.getElementById('add-job-form').style.display='none';
+    ['aj-co','aj-role','aj-loc'].forEach(id=>document.getElementById(id).value='');
+    toast('Data persisted online permanently.');
+    await pullStateFromCloud();
+  }
+}
+
+async function approveJob(id) {
+  const { error } = await supabaseClient
+    .from('user_jobs')
+    .update({ status: 'Auto-applied' })
+    .eq('id', id);
+
+  if (error) {
+    toast("Sync error: " + error.message);
+  } else {
+    toast("Pipeline record state upgraded.");
+    await pullStateFromCloud();
+  }
+}
+
+async function skipJob(id) {
+  const { error } = await supabaseClient
+    .from('user_jobs')
+    .update({ status: 'Rejected' })
+    .eq('id', id);
+
+  if (error) {
+    toast("Mutation error: " + error.message);
+  } else {
+    toast("Record archived safely.");
+    await pullStateFromCloud();
+  }
+}
+
+async function updateAppStatus(id, val) {
+  const { error } = await supabaseClient
+    .from('user_jobs')
+    .update({ status: val })
+    .eq('id', id);
+
+  if (error) {
+    toast("Failed mutating pipeline: " + error.message);
+  } else {
+    toast("Database record synchronized.");
+    await pullStateFromCloud();
+  }
+}
+
+// --- RENDER LOGIC PIPELINES ---
+function sw(name){
+  const tabs=['dash','profile','jobs','applied','settings','ai'];
+  document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.remove('active');if(tabs[i]===name)t.classList.add('active')});
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('p-'+name).classList.add('active');
+  if(name==='dash')renderDash();
+  if(name==='jobs')renderJobs();
+  if(name==='applied')renderApplied();
+}
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>{t.classList.remove('show');},2500);
+}
+
+function toggleAgent(){
+  state.agentOn=!state.agentOn;
+  document.getElementById('agent-dot').className='dot'+(state.agentOn?'':' off');
+  document.getElementById('agent-lbl').textContent=state.agentOn?'Agent active':'Agent paused';
+  document.getElementById('agent-btn').textContent=state.agentOn?'Pause':'Resume';
+  toast(state.agentOn?'Agent scanning pipelines active':'Agent operation sleep triggered');
+}
+
+function matchColor(m){
+  if(m>=90)return{bg:'rgba(16,185,129,0.15)',col:'#34d399',bd:'#10b981'};
+  if(m>=75)return{bg:'rgba(59,130,246,0.15)',col:'#60a5fa',bd:'#3b82f6'};
+  return{bg:'rgba(245,158,11,0.15)',col:'#fbbf24',bd:'#f59e0b'};
+}
+
+function renderDash(){
+  const pendingJobs = state.jobs.filter(j => j.status === 'Pending' || j.status === 'pending');
+  const total = state.jobs.length;
+  const interviews = state.jobs.filter(a=>a.status==='Interview').length;
+  const auto = state.jobs.filter(a=>a.status==='Auto-applied').length;
+  
+  document.getElementById('dash-metrics').innerHTML=`
+    <div class="m"><div class="mv">${total}</div><div class="ml">Total tracked</div></div>
+    <div class="m"><div class="mv">${pendingJobs.length}</div><div class="ml">New matches</div></div>
+    <div class="m"><div class="mv">${interviews}</div><div class="ml">Interviews</div></div>
+    <div class="m"><div class="mv">${auto}</div><div class="ml">Auto-applied</div></div>`;
+    
+  const now=new Date();
+  document.getElementById('last-scan').textContent=`Synchronized: ${now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('agent-log').innerHTML=state.agentLog.map(l=>`
+    <div class="log-item">
+      <div class="log-dot" style="background:${l.color}"></div>
+      <div style="flex:1">${l.msg}</div>
+      <div style="color:var(--color-text-secondary);white-space:nowrap">${l.time}</div>
+    </div>`).join('');
+    
+  if(!pendingJobs.length) {
+    document.getElementById('dash-jobs').innerHTML = '<div class="empty">No outstanding matches evaluated.</div>';
+    return;
+  }
+    
+  document.getElementById('dash-jobs').innerHTML=pendingJobs.slice(0,3).map(j=>{
+    const score = j.match_score || j.match || 75;
+    const mc=matchColor(score);
+    return`<div class="job-card">
+      <div class="jc-top">
+        <div><div class="jc-co">${j.company}</div><div class="jc-role">${j.role} · ${j.location || 'Remote'}</div></div>
+        <div class="match-ring" style="background:${mc.bg};color:${mc.col};border-color:${mc.bd}">${score}%</div>
+      </div>
+      <div class="jc-bot" style="margin-top:10px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">${j.type || 'Full-time'}</span>
+        <div style="display:flex;gap:6px">
+          <button onclick="approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ✓</button>
+          <button onclick="skipJob(${j.id})" style="font-size:11px;padding:4px 10px">Skip</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderJobs(){
+  const ft=document.getElementById('jf-type').value;
+  let pendingJobs = state.jobs.filter(j=>j.status==='Pending' || j.status==='pending');
+  if(ft) pendingJobs=pendingJobs.filter(j=>j.type===ft);
+  
+  const el=document.getElementById('jobs-list');
+  if(!pendingJobs.length){el.innerHTML='<div class="empty">No remaining evaluation records inside matching stack.</div>';return;}
+  
+  el.innerHTML=pendingJobs.map(j=>{
+    const score = j.match_score || j.match || 75;
+    const mc=matchColor(score);
+    return`<div class="job-card">
+      <div class="jc-top">
+        <div><div class="jc-co">${j.company}</div><div class="jc-role">${j.role}</div></div>
+        <div class="match-ring" style="background:${mc.bg};color:${mc.col};border-color:${mc.bd}">${score}%</div>
+      </div>
+      <div class="jc-bot" style="margin-top:12px">
+        <span style="font-size:11px;color:var(--color-text-secondary)">${j.location || 'Remote'} · ${j.type || 'Full-time'}</span>
+        <div style="display:flex;gap:6px">
+          <button onclick="approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ✓</button>
+          <button onclick="skipJob(${j.id})" style="font-size:11px;padding:4px 10px">Skip</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderApplied(){
+  const filter=document.getElementById('af-status').value;
+  let list=state.jobs.filter(j=>j.status!=='Pending' && j.status!=='pending');
+  if(filter)list=list.filter(a=>a.status===filter);
+  
+  const total = state.jobs.length;
+  const interviews = state.jobs.filter(a=>a.status==='Interview').length;
+  const auto = state.jobs.filter(a=>a.status==='Auto-applied').length;
+  const offered = state.jobs.filter(a=>a.status==='Offered').length;
+  
+  document.getElementById('app-metrics').innerHTML=`
+    <div class="m"><div class="mv">${total}</div><div class="ml">Total applied</div></div>
+    <div class="m"><div class="mv">${auto}</div><div class="ml">Auto-applied</div></div>
+    <div class="m"><div class="mv">${interviews}</div><div class="ml">Interviews</div></div>
+    <div class="m"><div class="mv">${offered}</div><div class="ml">Offers</div></div>`;
+    
+  const el=document.getElementById('applied-list');
+  if(!list.length){el.innerHTML='<div class="empty">No processed pipelines detected.</div>';return;}
+  
+  const statMap={'Auto-applied':'bg','Manually applied':'bgy','Interview':'by','Rejected':'br','Offered':'bgr'};
+  
+  el.innerHTML=list.map(a=>{
+    const score = a.match_score || a.match || 75;
+    return`<div class="job-card">
+      <div class="jc-top">
+        <div><div class="jc-co">${a.company}</div><div class="jc-role">${a.role}</div></div>
+        <div class="match-ring" style="background:${matchColor(score).bg};color:${matchColor(score).col};border-color:${matchColor(score).bd}">${score}%</div>
+      </div>
+      <div class="jc-bot" style="margin-top:12px">
+        <span class="badge ${statMap[a.status]||'bgy'}">${a.status}</span>
+        <div style="display:flex;gap:6px">
+          <select onchange="updateAppStatus(${a.id},this.value)" style="font-size:11px;padding:3px 6px;width:auto">
+            ${['Auto-applied','Manually applied','Interview','Rejected','Offered'].map(s=>`<option${s===a.status?' selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addJobPrompt(){
+  const f = document.getElementById('add-job-form'); f.style.display = f.style.display==='none'?'block':'none';
+}
+function simulateScan(){ toast('Scanning networks...'); pullStateFromCloud(); }
+function addTag(inId,listId,key){
+  const inp=document.getElementById(inId); const val=inp.value.trim(); if(!val)return;
+  if(!state[key])state[key]=[]; if(state[key].includes(val)) return toast('Duplicate entries dropped.');
+  state[key].push(val); inp.value=''; renderTag(listId,key); calcPc();
+}
+function removeTag(key,val,listId){ state[key]=state[key].filter(x=>x!==val); renderTag(listId,key); calcPc(); }
+function renderTag(listId,key){
+  document.getElementById(listId).innerHTML=state[key].map(v=>`<span class="tag">${v}<button onclick="removeTag('${key}','${v}','${listId}')">×</button></span>`).join('');
+}
+function calcPc(){
+  const fields=['p-name','p-email','p-phone','p-loc','p-summary'];
+  const filled=fields.filter(id=>document.getElementById(id)?.value.trim()).length;
+  const pct=Math.round((filled/fields.length)*100);
+  document.getElementById('pc-pct').textContent=pct;
+  document.getElementById('pc-fill').style.width=pct+'%';
+}
+function saveSett(){toast('Configuration records synced.');}
+function qa(q){sendPrompt(q);}
+function doChat(){
+  const inp=document.getElementById('chat-in'); const q=inp.value.trim(); if(!q)return;
+  sendPrompt(q); inp.value='';
+}
+function sendPrompt(p){toast('Instruction stack sent.');}
+</script>
+</body>
+</html>
