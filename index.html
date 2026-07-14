@@ -37,6 +37,7 @@ body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px
   background: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #070a12 60%);
   display: flex;
   flex-direction: column;
+  z-index: 1;
 }
 .ln-nav {
   max-width: 1200px;
@@ -74,11 +75,11 @@ body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px
 .ln-companies { display: flex; justify-content: center; align-items: center; gap: 3.5rem; opacity: 0.4; flex-wrap: wrap; }
 .ln-companies i { font-size: 24px; color: #fff; }
 
-/* --- SEAMLESS FLOATING AUTH MODAL VIEWPORTS --- */
+/* --- FLOATING AUTH MODAL Viewport Wrapper --- */
 #auth-modal-wrapper {
   position: fixed;
   inset: 0;
-  background: rgba(7, 10, 18, 0.6);
+  background: rgba(7, 10, 18, 0.7);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: 99999;
@@ -87,24 +88,22 @@ body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px
   justify-content: center;
 }
 .auth-frame {
-  background: rgba(17, 24, 39, 0.85);
+  background: rgba(17, 24, 39, 0.9);
   border: 1px solid var(--color-border-secondary);
   border-radius: 20px;
   padding: 2.5rem;
   width: 100%;
   max-width: 420px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
   position: relative;
-  animation: modalScaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
-@keyframes modalScaleUp { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-.auth-close { position: absolute; top: 20px; right: 20px; background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 18px; padding: 4px; }
+.auth-close { position: absolute; top: 20px; right: 20px; background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 18px; padding: 4px; z-index: 100; }
 .auth-close:hover { color: #fff; }
 .auth-header { text-align: center; margin-bottom: 1.75rem; }
 .auth-subtitle { font-size: 13px; color: var(--color-text-secondary); margin-top: 6px; }
 
 /* MAIN APPLICATION WORKSPACE FRAME */
-.app{max-width:680px;margin:0 auto;padding:2rem 1rem;display:none}
+.app{max-width:680px;margin:0 auto;padding:2rem 1rem;display:none;position:relative;z-index:2;}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem}
 .logo{font-size:20px;font-weight:700;letter-spacing:-0.03em}
 .logo span{color:var(--brand-primary)}
@@ -226,11 +225,11 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
   <footer class="ln-social">
     <div class="ln-social-text">Get hired by top companies worldwide</div>
     <div class="ln-companies">
-      <i class="ti ti-brand-google"></i>
-      <i class="ti ti-brand-meta"></i>
-      <i class="ti ti-brand-apple"></i>
-      <i class="ti ti-brand-microsoft"></i>
-      <i class="ti ti-brand-netflix"></i>
+      <i class="ti ti-brand-google" aria-hidden="true"></i>
+      <i class="ti ti-brand-meta" aria-hidden="true"></i>
+      <i class="ti ti-brand-apple" aria-hidden="true"></i>
+      <i class="ti ti-brand-microsoft" aria-hidden="true"></i>
+      <i class="ti ti-brand-netflix" aria-hidden="true"></i>
     </div>
   </footer>
 </div>
@@ -288,7 +287,7 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
   </div>
 </div>
 
-<!-- ENTERPRISE CORE WORKSPACE -->
+<!-- ENTERPRISE CORE WORKSPACE (MAIN WEBSITE DASHBOARD) -->
 <div class="app" id="main-application">
   <div class="topbar">
     <div class="logo"><span>AI</span>JobAgent</div>
@@ -510,7 +509,14 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
 // --- SECURE INFRASTRUCTURE CONNECTIVITY TARGETS ---
 const SUPABASE_URL = "https://isfphonwyfujovmxpfcp.supabase.co"; 
 const SUPABASE_ANON_KEY = "sb_publishable_ogsRWUUMfI7Rzh3s4d4xKA_ewWbxGwQ";
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabaseClient;
+
+// Safe client initialization structure
+try {
+  supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch(e) {
+  console.error("Supabase load pending...", e);
+}
 
 let currentUserInstance = null;
 
@@ -526,21 +532,29 @@ let state={
 
 // --- DYNAMIC VIEWPORT & MODAL CONTROL LOGIC ---
 function openAuthModal(viewType) {
-  document.getElementById('auth-modal-wrapper').style.display = 'flex';
-  toggleAuthModalView(viewType);
+  const modalWrapper = document.getElementById('auth-modal-wrapper');
+  if(modalWrapper) {
+    modalWrapper.style.display = 'flex';
+    toggleAuthModalView(viewType);
+  }
 }
 
 function closeAuthModal() {
-  document.getElementById('auth-modal-wrapper').style.display = 'none';
+  const modalWrapper = document.getElementById('auth-modal-wrapper');
+  if(modalWrapper) modalWrapper.style.display = 'none';
 }
 
 function toggleAuthModalView(viewType) {
-  if(viewType === 'login') {
-    document.getElementById('modal-view-login').style.display = 'block';
-    document.getElementById('modal-view-signup').style.display = 'none';
-  } else {
-    document.getElementById('modal-view-login').style.display = 'none';
-    document.getElementById('modal-view-signup').style.display = 'block';
+  const loginView = document.getElementById('modal-view-login');
+  const signupView = document.getElementById('modal-view-signup');
+  if(loginView && signupView) {
+    if(viewType === 'login') {
+      loginView.style.display = 'block';
+      signupView.style.display = 'none';
+    } else {
+      loginView.style.display = 'none';
+      signupView.style.display = 'block';
+    }
   }
 }
 
@@ -552,9 +566,8 @@ async function handleSignUp() {
   const confirmPwd = document.getElementById('reg-pwd-confirm').value.trim();
   
   if(!name || !email || !password || !confirmPwd) return toast("Provide all registration profile fields.");
-  if(password !== confirmPwd) return toast("Passwords do not match matching keys.");
+  if(password !== confirmPwd) return toast("Passwords do not match.");
   
-  // Create secure engine database authentication user row
   const { data, error } = await supabaseClient.auth.signUp({ 
     email, 
     password,
@@ -563,7 +576,6 @@ async function handleSignUp() {
   
   if (error) return toast(error.message);
   
-  // Directly prepare profile cluster block synchronously to avoid structural execution error
   currentUserInstance = data.user;
   if(currentUserInstance) {
     const initialProfilePayload = {
@@ -578,7 +590,7 @@ async function handleSignUp() {
   closeAuthModal();
   document.getElementById('landing-viewport').style.display = 'none';
   document.getElementById('main-application').style.display = 'block';
-  toast("Registration complete! Welcome to your active engine workspace.");
+  toast("Welcome to your dashboard workspace!");
   
   await pullStateFromCloud();
   await pullProfileFromCloud();
@@ -596,7 +608,7 @@ async function handleLogin() {
   closeAuthModal();
   document.getElementById('landing-viewport').style.display = 'none';
   document.getElementById('main-application').style.display = 'block';
-  toast("Authentication pass. Synchronizing data logs...");
+  toast("Logged in successfully!");
   
   await pullStateFromCloud();
   await pullProfileFromCloud();
@@ -674,10 +686,10 @@ async function saveProfile() {
   if (error) {
     toast("Profile sync failure: " + error.message);
   } else {
-    toast("Cloud credentials updated and locked.");
+    toast("Profile locked and updated.");
     state.agentLog.unshift({
       type: 'system',
-      msg: 'User profile records updated securely inside database cluster.',
+      msg: 'User profile records updated securely.',
       time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
       color: '#6366f1'
     });
@@ -706,7 +718,7 @@ async function saveJob() {
   } else {
     document.getElementById('add-job-form').style.display='none';
     ['aj-co','aj-role','aj-loc'].forEach(id=>document.getElementById(id).value='');
-    toast('Data persisted online permanently.');
+    toast('Job saved.');
     await pullStateFromCloud();
   }
 }
@@ -714,13 +726,13 @@ async function saveJob() {
 async function approveJob(id) {
   const { error } = await supabaseClient.from('user_jobs').update({ status: 'Auto-applied' }).eq('id', id);
   if (error) toast("Sync error: " + error.message);
-  else { toast("Pipeline record state upgraded."); await pullStateFromCloud(); }
+  else { toast("Applied successfully."); await pullStateFromCloud(); }
 }
 
 async function skipJob(id) {
   const { error } = await supabaseClient.from('user_jobs').update({ status: 'Rejected' }).eq('id', id);
   if (error) toast("Mutation error: " + error.message);
-  else { toast("Record archived safely."); await pullStateFromCloud(); }
+  else { toast("Archived safely."); await pullStateFromCloud(); }
 }
 
 async function updateAppStatus(id, val) {
@@ -729,7 +741,7 @@ async function updateAppStatus(id, val) {
   else { toast("Database record synchronized."); await pullStateFromCloud(); }
 }
 
-// --- DATA MESH RENDER COMPONENT ENGINE ---
+// --- RENDER COMPONENT CONTROLLERS ---
 function sw(name){
   const tabs=['dash','profile','jobs','applied','settings','ai'];
   document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.remove('active');if(tabs[i]===name)t.classList.add('active')});
@@ -742,8 +754,10 @@ function sw(name){
 
 function toast(msg){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>{t.classList.remove('show');},2500);
+  if(t) {
+    t.textContent=msg; t.classList.add('show');
+    setTimeout(()=>{t.classList.remove('show');},2500);
+  }
 }
 
 function toggleAgent(){
@@ -751,13 +765,12 @@ function toggleAgent(){
   document.getElementById('agent-dot').className='dot'+(state.agentOn?'':' off');
   document.getElementById('agent-lbl').textContent=state.agentOn?'Agent active':'Agent paused';
   document.getElementById('agent-btn').textContent=state.agentOn?'Pause':'Resume';
-  toast(state.agentOn?'Agent scanning pipelines active':'Agent operation sleep triggered');
 }
 
 function matchColor(m){
-  if(m>=90)return{bg:'rgba(16,185,129,0.15)',col:#34d399,bd:'#10b981'};
-  if(m>=75)return{bg:'rgba(99,102,241,0.15)',col:#a5b4fc,bd:'#6366f1'};
-  return{bg:'rgba(245,158,11,0.15)',col:#fbbf24,bd:'#f59e0b'};
+  if(m>=90)return{bg:'rgba(16,185,129,0.15)',col:'#34d399',bd:'#10b981'};
+  if(m>=75)return{bg:'rgba(99,102,241,0.15)',col:'#a5b4fc',bd:'#6366f1'};
+  return{bg:'rgba(245,158,11,0.15)',col:'#fbbf24',bd:'#f59e0b'};
 }
 
 function renderDash(){
@@ -766,43 +779,53 @@ function renderDash(){
   const interviews = state.jobs.filter(a=>a.status==='Interview').length;
   const auto = state.jobs.filter(a=>a.status==='Auto-applied').length;
   
-  document.getElementById('dash-metrics').innerHTML=`
-    <div class="m"><div class="mv">${total}</div><div class="ml">Total tracked</div></div>
-    <div class="m"><div class="mv">${pendingJobs.length}</div><div class="ml">New matches</div></div>
-    <div class="m"><div class="mv">${interviews}</div><div class="ml">Interviews</div></div>
-    <div class="m"><div class="mv">${auto}</div><div class="ml">Auto-applied</div></div>`;
-    
-  const now=new Date();
-  document.getElementById('last-scan').textContent=`Synchronized: ${now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
-  document.getElementById('agent-log').innerHTML=state.agentLog.map(l=>`
-    <div class="log-item">
-      <div class="log-dot" style="background:${l.color}"></div>
-      <div style="flex:1">${l.msg}</div>
-      <div style="color:var(--color-text-secondary);white-space:nowrap">${l.time}</div>
-    </div>`).join('');
-    
-  if(!pendingJobs.length) {
-    document.getElementById('dash-jobs').innerHTML = '<div class="empty">No outstanding matches evaluated.</div>';
-    return;
+  const metrics = document.getElementById('dash-metrics');
+  if(metrics) {
+    metrics.innerHTML=`
+      <div class="m"><div class="mv">${total}</div><div class="ml">Total tracked</div></div>
+      <div class="m"><div class="mv">${pendingJobs.length}</div><div class="ml">New matches</div></div>
+      <div class="m"><div class="mv">${interviews}</div><div class="ml">Interviews</div></div>
+      <div class="m"><div class="mv">${auto}</div><div class="ml">Auto-applied</div></div>`;
   }
     
-  document.getElementById('dash-jobs').innerHTML=pendingJobs.slice(0,3).map(j=>{
-    const score = j.match_score || j.match || 75;
-    const mc=matchColor(score);
-    return`<div class="job-card">
-      <div class="jc-top">
-        <div><div class="jc-co">${j.company}</div><div class="jc-role">${j.role} · ${j.location || 'Remote'}</div></div>
-        <div class="match-ring" style="background:${mc.bg};color:${mc.col};border-color:${mc.bd}">${score}%</div>
-      </div>
-      <div class="jc-bot" style="margin-top:10px">
-        <span style="font-size:11px;color:var(--color-text-secondary)">${j.type || 'Full-time'}</span>
-        <div style="display:flex;gap:6px">
-          <button onclick="approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ✓</button>
-          <button onclick="skipJob(${j.id})" style="font-size:11px;padding:4px 10px">Skip</button>
+  const now=new Date();
+  const ls = document.getElementById('last-scan');
+  if(ls) ls.textContent=`Synchronized: ${now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  
+  const al = document.getElementById('agent-log');
+  if(al) {
+    al.innerHTML=state.agentLog.map(l=>`
+      <div class="log-item">
+        <div class="log-dot" style="background:${l.color}"></div>
+        <div style="flex:1">${l.msg}</div>
+        <div style="color:var(--color-text-secondary);white-space:nowrap">${l.time}</div>
+      </div>`).join('');
+  }
+    
+  const dj = document.getElementById('dash-jobs');
+  if(dj) {
+    if(!pendingJobs.length) {
+      dj.innerHTML = '<div class="empty">No outstanding matches evaluated.</div>';
+      return;
+    }
+    dj.innerHTML=pendingJobs.slice(0,3).map(j=>{
+      const score = j.match_score || j.match || 75;
+      const mc=matchColor(score);
+      return`<div class="job-card">
+        <div class="jc-top">
+          <div><div class="jc-co">${j.company}</div><div class="jc-role">${j.role} · ${j.location || 'Remote'}</div></div>
+          <div class="match-ring" style="background:${mc.bg};color:${mc.col};border-color:${mc.bd}">${score}%</div>
         </div>
-      </div>
-    </div>`;
-  }).join('');
+        <div class="jc-bot" style="margin-top:10px">
+          <span style="font-size:11px;color:var(--color-text-secondary)">${j.type || 'Full-time'}</span>
+          <div style="display:flex;gap:6px">
+            <button onclick="approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ✓</button>
+            <button onclick="skipJob(${j.id})" style="font-size:11px;padding:4px 10px">Skip</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
 }
 
 function renderJobs(){
@@ -811,7 +834,8 @@ function renderJobs(){
   if(ft) pendingJobs=pendingJobs.filter(j=>j.type===ft);
   
   const el=document.getElementById('jobs-list');
-  if(!pendingJobs.length){el.innerHTML='<div class="empty">No remaining evaluation records inside matching stack.</div>';return;}
+  if(!el) return;
+  if(!pendingJobs.length){el.innerHTML='<div class="empty">No remaining matches inside stack.</div>';return;}
   
   el.innerHTML=pendingJobs.map(j=>{
     const score = j.match_score || j.match || 75;
@@ -842,13 +866,17 @@ function renderApplied(){
   const auto = state.jobs.filter(a=>a.status==='Auto-applied').length;
   const offered = state.jobs.filter(a=>a.status==='Offered').length;
   
-  document.getElementById('app-metrics').innerHTML=`
-    <div class="m"><div class="mv">${total}</div><div class="ml">Total applied</div></div>
-    <div class="m"><div class="mv">${auto}</div><div class="ml">Auto-applied</div></div>
-    <div class="m"><div class="mv">${interviews}</div><div class="ml">Interviews</div></div>
-    <div class="m"><div class="mv">${offered}</div><div class="ml">Offers</div></div>`;
+  const am = document.getElementById('app-metrics');
+  if(am) {
+    am.innerHTML=`
+      <div class="m"><div class="mv">${total}</div><div class="ml">Total applied</div></div>
+      <div class="m"><div class="mv">${auto}</div><div class="ml">Auto-applied</div></div>
+      <div class="m"><div class="mv">${interviews}</div><div class="ml">Interviews</div></div>
+      <div class="m"><div class="mv">${offered}</div><div class="ml">Offers</div></div>`;
+  }
     
   const el=document.getElementById('applied-list');
+  if(!el) return;
   if(!list.length){el.innerHTML='<div class="empty">No processed pipelines detected.</div>';return;}
   
   const statMap={'Auto-applied':'bg','Manually applied':'bgy','Interview':'by','Rejected':'br','Offered':'bgr'};
@@ -873,7 +901,7 @@ function renderApplied(){
 }
 
 function addJobPrompt(){
-  const f = document.getElementById('add-job-form'); f.style.display = f.style.display==='none'?'block':'none';
+  const f = document.getElementById('add-job-form'); if(f) f.style.display = f.style.display==='none'?'block':'none';
 }
 function simulateScan(){ toast('Scanning networks...'); pullStateFromCloud(); }
 function addTag(inId,listId,key){
@@ -883,22 +911,25 @@ function addTag(inId,listId,key){
 }
 function removeTag(key,val,listId){ state[key]=state[key].filter(x=>x!==val); renderTag(listId,key); calcPc(); }
 function renderTag(listId,key){
-  document.getElementById(listId).innerHTML=state[key].map(v=>`<span class="tag">${v}<button onclick="removeTag('${key}','${v}','${listId}')">×</button></span>`).join('');
+  const el = document.getElementById(listId);
+  if(el) el.innerHTML=state[key].map(v=>`<span class="tag">${v}<button onclick="removeTag('${key}','${v}','${listId}')">×</button></span>`).join('');
 }
 function calcPc(){
   const fields=['p-name','p-email','p-phone','p-loc','p-summary'];
   const filled=fields.filter(id=>document.getElementById(id)?.value.trim()).length;
   const pct=Math.round((filled/fields.length)*100);
-  document.getElementById('pc-pct').textContent=pct;
-  document.getElementById('pc-fill').style.width=pct+'%';
+  const label = document.getElementById('pc-pct');
+  const fill = document.getElementById('pc-fill');
+  if(label) label.textContent=pct;
+  if(fill) fill.style.width=pct+'%';
 }
-function saveSett(){toast('Configuration records synced.');}
+function saveSett(){toast('Configuration synced.');}
 function qa(q){sendPrompt(q);}
 function doChat(){
   const inp=document.getElementById('chat-in'); const q=inp.value.trim(); if(!q)return;
   sendPrompt(q); inp.value='';
 }
-function sendPrompt(p){toast('Instruction stack sent.');}
+function sendPrompt(p){toast('Instruction sent.');}
 </script>
 </body>
 </html>
