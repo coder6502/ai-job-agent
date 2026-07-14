@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Job Agent — Enterprise Command Center</title>
+<!-- Google Fonts, Iconsets, and Production Supabase SDK Integration -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,8 +20,8 @@
   --color-border-tertiary: rgba(255, 255, 255, 0.04);
   --color-background-primary: #111827;
   --color-background-secondary: #1f2937;
-  --brand-primary: #3b82f6;
-  --brand-glow: rgba(59, 130, 246, 0.12);
+  --brand-primary: #6366f1;
+  --brand-glow: rgba(99, 102, 241, 0.15);
   --border-radius-md: 8px;
   --border-radius-lg: 14px;
 }
@@ -28,46 +29,78 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px;background:#0b0f19;min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 
-/* HIGH-FIDELITY PRODUCTION AUTH SCREEN */
-#auth-viewport {
+/* --- HIGH-FIDELITY LANDING PAGE INTERFACE --- */
+#landing-viewport {
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+  background: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #070a12 60%);
+  display: flex;
+  flex-direction: column;
+}
+.ln-nav {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ln-logo { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; color: #fff; }
+.ln-logo span { color: var(--brand-primary); }
+.ln-actions { display: flex; align-items: center; gap: 1.5rem; }
+.ln-btn-login { background: none; border: none; color: var(--color-text-primary); font-weight: 600; cursor: pointer; font-size: 14px; }
+.ln-btn-login:hover { color: var(--brand-primary); }
+.ln-btn-signup { background: var(--brand-primary); color: #fff; border: none; padding: 10px 22px; border-radius: 30px; font-weight: 600; cursor: pointer; font-size: 14px; box-shadow: 0 4px 14px var(--brand-glow); transition: all 0.2s ease; }
+.ln-btn-signup:hover { transform: translateY(-1px); background: #4f46e5; box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3); }
+
+.ln-hero {
+  max-width: 800px;
+  margin: 6rem auto 0 auto;
+  padding: 0 2rem;
+  text-align: center;
+  flex: 1;
+}
+.ln-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--color-border-secondary); padding: 8px 16px; border-radius: 30px; font-size: 13px; font-weight: 500; color: #e0e7ff; margin-bottom: 2.5rem; }
+.ln-headline { font-size: 3.5rem; font-weight: 800; tracking: -0.03em; line-height: 1.15; margin-bottom: 1.5rem; color: #fff; }
+.ln-headline span { background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.ln-subtext { font-size: 17px; color: var(--color-text-secondary); line-height: 1.6; max-width: 640px; margin: 0 auto 2.5rem auto; }
+.ln-btn-main { background: var(--brand-primary); color: #fff; border: none; padding: 16px 36px; border-radius: 30px; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 20px var(--brand-glow); transition: all 0.2s ease; }
+.ln-btn-main:hover { transform: translateY(-2px); background: #4f46e5; box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35); }
+
+.ln-social { margin-top: 6rem; text-align: center; border-top: 1px solid var(--color-border-tertiary); padding-top: 2rem; padding-bottom: 4rem; }
+.ln-social-text { font-size: 12px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 1.5rem; }
+.ln-companies { display: flex; justify-content: center; align-items: center; gap: 3.5rem; opacity: 0.4; flex-wrap: wrap; }
+.ln-companies i { font-size: 24px; color: #fff; }
+
+/* --- SEAMLESS FLOATING AUTH MODAL VIEWPORTS --- */
+#auth-modal-wrapper {
   position: fixed;
   inset: 0;
-  background: #070a12;
+  background: rgba(7, 10, 18, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   z-index: 99999;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
 }
-.auth-ambient-1 {
-  position: absolute;
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, rgba(0,0,0,0) 70%);
-  top: -10%;
-  left: -10%;
-}
-.auth-ambient-2 {
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, rgba(0,0,0,0) 70%);
-  bottom: -10%;
-  right: -10%;
-}
 .auth-frame {
-  background: rgba(17, 24, 39, 0.8);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(17, 24, 39, 0.85);
   border: 1px solid var(--color-border-secondary);
   border-radius: 20px;
-  padding: 3rem 2.5rem;
+  padding: 2.5rem;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   position: relative;
-  z-index: 10;
+  animation: modalScaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
-.auth-header { text-align: center; margin-bottom: 2rem; }
+@keyframes modalScaleUp { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.auth-close { position: absolute; top: 20px; right: 20px; background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 18px; padding: 4px; }
+.auth-close:hover { color: #fff; }
+.auth-header { text-align: center; margin-bottom: 1.75rem; }
 .auth-subtitle { font-size: 13px; color: var(--color-text-secondary); margin-top: 6px; }
 
 /* MAIN APPLICATION WORKSPACE FRAME */
@@ -79,10 +112,7 @@ body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px
 
 .dot{width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);animation: pulseGlow 2s infinite ease-in-out}
 .dot.off{background:#64748b;box-shadow:none;animation:none}
-@keyframes pulseGlow {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.92); }
-}
+@keyframes pulseGlow { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.92); } }
 
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--color-border-tertiary);margin-bottom:2rem;overflow-x:auto;padding-bottom:2px}
 .tab{padding:10px 16px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--font-sans);display:flex;align-items:center;gap:6px;transition:all 0.2s ease}
@@ -91,13 +121,10 @@ body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px
 
 .panel{display:none;animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;}
 .panel.active{display:block}
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 .card{background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1.5rem;margin-bottom:1.25rem;box-shadow: 0 4px 20px rgba(0,0,0,0.2);transition: border-color 0.25s ease, box-shadow 0.25s ease;}
-.card:hover{border-color:rgba(59, 130, 246, 0.25);box-shadow: 0 8px 30px rgba(0,0,0,0.3);}
+.card:hover{border-color:rgba(99, 102, 241, 0.25);box-shadow: 0 8px 30px rgba(0,0,0,0.3);}
 
 .mg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
 .m{background:rgba(255,255,255,0.01);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:1rem;text-align:center;transition:transform 0.2s ease}
@@ -106,7 +133,7 @@ body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px
 .ml{font-size:11px;color:var(--color-text-secondary);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em}
 
 .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;letter-spacing:0.02em}
-.bg{background:rgba(59,130,246,0.15);color:#60a5fa}
+.bg{background:rgba(99,102,241,0.15);color:#a5b4fc}
 .by{background:rgba(245,158,11,0.15);color:#fbbf24}
 .bgr{background:rgba(16,185,129,0.15);color:#34d399}
 .br{background:rgba(239,68,68,0.15);color:#f87171}
@@ -122,8 +149,8 @@ textarea{resize:vertical;min-height:80px}
 
 btn,button{padding:9px 18px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:rgba(255,255,255,0.03);color:var(--color-text-primary);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1)}
 button:hover{background:rgba(255,255,255,0.08);transform:translateY(-1px)}
-.bp{background:var(--brand-primary);color:#fff;border-color:var(--brand-primary);box-shadow: 0 4px 12px rgba(59,130,246,0.25)}
-.bp:hover{background:#2563eb;box-shadow: 0 6px 20px rgba(59,130,246,0.4)}
+.bp{background:var(--brand-primary);color:#fff;border-color:var(--brand-primary);box-shadow: 0 4px 12px var(--brand-glow)}
+.bp:hover{background:#4f46e5;box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4)}
 .bd{background:rgba(239,68,68,0.1);color:#f87171;border-color:rgba(239,68,68,0.2)}
 .bd:hover{background:rgba(239,68,68,0.2)}
 
@@ -131,7 +158,7 @@ button:hover{background:rgba(255,255,255,0.08);transform:translateY(-1px)}
 .shd{display:flex;justify-content:space-between;align-items:center;margin-bottom:.875rem}
 
 .job-card{border:1px solid var(--color-border-tertiary);background:rgba(255,255,255,0.005);border-radius:var(--border-radius-md);padding:1.25rem;margin-bottom:.75rem;transition:all 0.25s cubic-bezier(0.16, 1, 0.3, 1)}
-.job-card:hover{border-color:var(--brand-primary);background:rgba(59, 130, 246, 0.02);transform:scale(1.005) translateX(2px)}
+.job-card:hover{border-color:var(--brand-primary);background:rgba(99, 102, 241, 0.02);transform:scale(1.005) translateX(2px)}
 .jc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
 .jc-co{font-weight:600;font-size:15px;letter-spacing:-0.01em}
 .jc-role{font-size:13px;color:var(--color-text-secondary);margin-bottom:6px}
@@ -154,7 +181,7 @@ input:checked+.slider{background:var(--brand-primary);border-color:var(--brand-p
 input:checked+.slider:before{transform:translateX(18px);background:white}
 
 .ai-box{background:rgba(255,255,255,0.02);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;font-size:13px;line-height:1.65;margin-bottom:.75rem;white-space:pre-wrap}
-.u-box{background:var(--brand-primary);color:#fff;border-radius:var(--border-radius-lg);padding:1rem 1.25rem;font-size:13px;line-height:1.65;margin-bottom:.75rem;box-shadow: 0 4px 12px rgba(59,130,246,0.2)}
+.u-box{background:var(--brand-primary);color:#fff;border-radius:var(--border-radius-lg);padding:1rem 1.25rem;font-size:13px;line-height:1.65;margin-bottom:.75rem;box-shadow: 0 4px 12px var(--brand-glow)}
 .ci{display:flex;gap:8px;margin-top:1rem}
 .ci input{flex:1}
 .pbar{height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-top:6px}
@@ -179,13 +206,43 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
 </head>
 <body>
 
-<div id="auth-viewport">
-  <div class="auth-ambient-1"></div>
-  <div class="auth-ambient-2"></div>
-  <div class="auth-frame">
+<!-- PUBLIC DYNAMIC LANDING PORTAL INTERFACE -->
+<div id="landing-viewport">
+  <nav class="ln-nav">
+    <div class="ln-logo"><span>AI</span>JobAgent</div>
+    <div class="ln-actions">
+      <button class="ln-btn-login" onclick="openAuthModal('login')">Log in</button>
+      <button class="ln-btn-signup" onclick="openAuthModal('signup')">Sign up</button>
+    </div>
+  </nav>
+
+  <section class="ln-hero">
+    <div class="ln-badge"><i class="ti ti-trophy"></i> 61% of users get an interview in first 10 days</div>
+    <h1 class="ln-headline">Stop Applying for Weeks<br><span>Start Interviewing in Days</span></h1>
+    <p class="ln-subtext">AIJobAgent finds high-match roles, tailors your resume &amp; cover letter, auto-applies, and tracks logs live — so you move from submit to getting a job fast.</p>
+    <button class="ln-btn-main" onclick="openAuthModal('signup')">Start now &rarr;</button>
+  </section>
+
+  <footer class="ln-social">
+    <div class="ln-social-text">Get hired by top companies worldwide</div>
+    <div class="ln-companies">
+      <i class="ti ti-brand-google"></i>
+      <i class="ti ti-brand-meta"></i>
+      <i class="ti ti-brand-apple"></i>
+      <i class="ti ti-brand-microsoft"></i>
+      <i class="ti ti-brand-netflix"></i>
+    </div>
+  </footer>
+</div>
+
+<!-- DYNAMIC FLOATING INTERACTIVE MODAL COMPONENT -->
+<div id="auth-modal-wrapper">
+  <!-- LOGIN MODAL INTERFACE VIEW -->
+  <div class="auth-frame" id="modal-view-login" style="display:none;">
+    <button class="auth-close" onclick="closeAuthModal()"><i class="ti ti-x"></i></button>
     <div class="auth-header">
       <div class="logo"><span>AI</span>JobAgent</div>
-      <div class="auth-subtitle">Enterprise Workspace Terminal</div>
+      <div class="auth-subtitle">Welcome back! Please login to your portal</div>
     </div>
     <div class="fl">
       <label>Email Address</label>
@@ -195,13 +252,43 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
       <label>Password</label>
       <input type="password" id="auth-pwd" placeholder="••••••••">
     </div>
-    <div style="display:flex; gap:12px; margin-top:2rem;">
-      <button class="bp" onclick="handleLogin()" style="flex:1; padding:11px 0;">Log In</button>
-      <button onclick="handleSignUp()" style="flex:1; padding:11px 0;">Sign Up</button>
+    <button class="bp" onclick="handleLogin()" style="width:100%; margin-top:1.5rem; padding:11px 0;">Log In</button>
+    <div style="text-align:center; margin-top:1.25rem; font-size:12px; color:var(--color-text-secondary)">
+      Don't have an account? <span style="color:var(--brand-primary); cursor:pointer; font-weight:600;" onclick="toggleAuthModalView('signup')">Sign Up</span>
+    </div>
+  </div>
+
+  <!-- MULTI-INPUT SIGNUP MODAL INTERFACE VIEW -->
+  <div class="auth-frame" id="modal-view-signup" style="display:none;">
+    <button class="auth-close" onclick="closeAuthModal()"><i class="ti ti-x"></i></button>
+    <div class="auth-header">
+      <div class="logo"><span>AI</span>JobAgent</div>
+      <div class="auth-subtitle">Create your secure engine developer account</div>
+    </div>
+    <div class="fl">
+      <label>Full Name</label>
+      <input type="text" id="reg-name" placeholder="John Doe">
+    </div>
+    <div class="fl">
+      <label>Email Address</label>
+      <input type="email" id="reg-email" placeholder="name@domain.com">
+    </div>
+    <div class="fl">
+      <label>Password</label>
+      <input type="password" id="reg-pwd" placeholder="••••••••">
+    </div>
+    <div class="fl">
+      <label>Confirm Password</label>
+      <input type="password" id="reg-pwd-confirm" placeholder="••••••••">
+    </div>
+    <button class="bp" onclick="handleSignUp()" style="width:100%; margin-top:1.5rem; padding:11px 0;">Create Account</button>
+    <div style="text-align:center; margin-top:1.25rem; font-size:12px; color:var(--color-text-secondary)">
+      Already registered? <span style="color:var(--brand-primary); cursor:pointer; font-weight:600;" onclick="toggleAuthModalView('login')">Log In</span>
     </div>
   </div>
 </div>
 
+<!-- ENTERPRISE CORE WORKSPACE -->
 <div class="app" id="main-application">
   <div class="topbar">
     <div class="logo"><span>AI</span>JobAgent</div>
@@ -221,6 +308,7 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
     <button class="tab" onclick="sw('ai')"><i class="ti ti-robot" aria-hidden="true"></i> AI chat</button>
   </div>
 
+  <!-- DASHBOARD -->
   <div class="panel active" id="p-dash">
     <div class="mg" id="dash-metrics"></div>
     <div class="card">
@@ -243,11 +331,12 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
     </div>
   </div>
 
+  <!-- PROFILE -->
   <div class="panel" id="p-profile">
     <div class="profile-complete">
       <div class="pc-bar">
         <div class="pc-label">Profile completeness — <span id="pc-pct">0</span>%</div>
-        <div class="pbar"><div class="pfill" id="pc-fill" style="background:#3b82f6;width:0%"></div></div>
+        <div class="pbar"><div class="pfill" id="pc-fill" style="background:#6366f1;width:0%"></div></div>
       </div>
       <span class="badge bg" id="pc-badge">Incomplete</span>
     </div>
@@ -314,6 +403,7 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
     <button class="bp" onclick="saveProfile()" style="width:100%">Save profile &amp; activate agent</button>
   </div>
 
+  <!-- JOB MATCHES -->
   <div class="panel" id="p-jobs">
     <div class="card" style="padding:.75rem 1rem">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -346,6 +436,7 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
     <div id="jobs-list"></div>
   </div>
 
+  <!-- APPLIED -->
   <div class="panel" id="p-applied">
     <div class="mg" id="app-metrics"></div>
     <div class="card">
@@ -359,6 +450,7 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
     </div>
   </div>
 
+  <!-- SETTINGS -->
   <div class="panel" id="p-settings">
     <div class="card">
       <div class="sec">Auto-apply settings</div>
@@ -393,6 +485,7 @@ input:checked+.slider:before{transform:translateX(18px);background:white}
     </div>
   </div>
 
+  <!-- AI CHAT -->
   <div class="panel" id="p-ai">
     <div class="card">
       <div class="sec">AI career assistant</div>
@@ -427,19 +520,68 @@ let state={
   skills:[],locs:[],cos:[],
   jobs:[],
   agentLog:[
-    {type:'system',msg:'Core systems connected to enterprise cluster securely.',time:'Now',color:'#3b82f6'}
+    {type:'system',msg:'Core systems connected to enterprise cluster securely.',time:'Now',color:'#6366f1'}
   ]
 };
 
-// --- AUTHENTICATION ACTION CONTROLLERS ---
+// --- DYNAMIC VIEWPORT & MODAL CONTROL LOGIC ---
+function openAuthModal(viewType) {
+  document.getElementById('auth-modal-wrapper').style.display = 'flex';
+  toggleAuthModalView(viewType);
+}
+
+function closeAuthModal() {
+  document.getElementById('auth-modal-wrapper').style.display = 'none';
+}
+
+function toggleAuthModalView(viewType) {
+  if(viewType === 'login') {
+    document.getElementById('modal-view-login').style.display = 'block';
+    document.getElementById('modal-view-signup').style.display = 'none';
+  } else {
+    document.getElementById('modal-view-login').style.display = 'none';
+    document.getElementById('modal-view-signup').style.display = 'block';
+  }
+}
+
+// --- SECURE INTERACTIVE AUTHENTICATION FLOWS ---
 async function handleSignUp() {
-  const email = document.getElementById('auth-email').value.trim();
-  const password = document.getElementById('auth-pwd').value.trim();
-  if(!email || !password) return toast("Provide mandatory account fields.");
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-pwd').value.trim();
+  const confirmPwd = document.getElementById('reg-pwd-confirm').value.trim();
   
-  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+  if(!name || !email || !password || !confirmPwd) return toast("Provide all registration profile fields.");
+  if(password !== confirmPwd) return toast("Passwords do not match matching keys.");
+  
+  // Create secure engine database authentication user row
+  const { data, error } = await supabaseClient.auth.signUp({ 
+    email, 
+    password,
+    options: { data: { full_name: name } }
+  });
+  
   if (error) return toast(error.message);
-  toast("Registration complete! Check verification email link.");
+  
+  // Directly prepare profile cluster block synchronously to avoid structural execution error
+  currentUserInstance = data.user;
+  if(currentUserInstance) {
+    const initialProfilePayload = {
+      id: currentUserInstance.id,
+      name: name,
+      email: email,
+      updated_at: new Date().toISOString()
+    };
+    await supabaseClient.from('profiles').upsert(initialProfilePayload);
+  }
+  
+  closeAuthModal();
+  document.getElementById('landing-viewport').style.display = 'none';
+  document.getElementById('main-application').style.display = 'block';
+  toast("Registration complete! Welcome to your active engine workspace.");
+  
+  await pullStateFromCloud();
+  await pullProfileFromCloud();
 }
 
 async function handleLogin() {
@@ -451,7 +593,8 @@ async function handleLogin() {
   if (error) return toast(error.message);
   
   currentUserInstance = data.user;
-  document.getElementById('auth-viewport').style.display = 'none';
+  closeAuthModal();
+  document.getElementById('landing-viewport').style.display = 'none';
   document.getElementById('main-application').style.display = 'block';
   toast("Authentication pass. Synchronizing data logs...");
   
@@ -461,7 +604,6 @@ async function handleLogin() {
 
 async function pullStateFromCloud() {
   if (!currentUserInstance) return;
-  
   const { data, error } = await supabaseClient
     .from('user_jobs')
     .select('*')
@@ -477,7 +619,6 @@ async function pullStateFromCloud() {
 
 async function pullProfileFromCloud() {
   if (!currentUserInstance) return;
-  
   const { data, error } = await supabaseClient
     .from('profiles')
     .select('*')
@@ -530,7 +671,6 @@ async function saveProfile() {
   };
 
   const { error } = await supabaseClient.from('profiles').upsert(profilePayload);
-    
   if (error) {
     toast("Profile sync failure: " + error.message);
   } else {
@@ -539,7 +679,7 @@ async function saveProfile() {
       type: 'system',
       msg: 'User profile records updated securely inside database cluster.',
       time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-      color: '#3b82f6'
+      color: '#6366f1'
     });
     renderDash();
   }
@@ -560,7 +700,7 @@ async function saveJob() {
     status: 'Pending'
   };
 
-  const { data, error } = await supabaseClient.from('user_jobs').insert([newJob]).select();
+  const { error } = await supabaseClient.from('user_jobs').insert([newJob]);
   if (error) {
     toast("Sync failed: " + error.message);
   } else {
@@ -572,48 +712,24 @@ async function saveJob() {
 }
 
 async function approveJob(id) {
-  const { error } = await supabaseClient
-    .from('user_jobs')
-    .update({ status: 'Auto-applied' })
-    .eq('id', id);
-
-  if (error) {
-    toast("Sync error: " + error.message);
-  } else {
-    toast("Pipeline record state upgraded.");
-    await pullStateFromCloud();
-  }
+  const { error } = await supabaseClient.from('user_jobs').update({ status: 'Auto-applied' }).eq('id', id);
+  if (error) toast("Sync error: " + error.message);
+  else { toast("Pipeline record state upgraded."); await pullStateFromCloud(); }
 }
 
 async function skipJob(id) {
-  const { error } = await supabaseClient
-    .from('user_jobs')
-    .update({ status: 'Rejected' })
-    .eq('id', id);
-
-  if (error) {
-    toast("Mutation error: " + error.message);
-  } else {
-    toast("Record archived safely.");
-    await pullStateFromCloud();
-  }
+  const { error } = await supabaseClient.from('user_jobs').update({ status: 'Rejected' }).eq('id', id);
+  if (error) toast("Mutation error: " + error.message);
+  else { toast("Record archived safely."); await pullStateFromCloud(); }
 }
 
 async function updateAppStatus(id, val) {
-  const { error } = await supabaseClient
-    .from('user_jobs')
-    .update({ status: val })
-    .eq('id', id);
-
-  if (error) {
-    toast("Failed mutating pipeline: " + error.message);
-  } else {
-    toast("Database record synchronized.");
-    await pullStateFromCloud();
-  }
+  const { error } = await supabaseClient.from('user_jobs').update({ status: val }).eq('id', id);
+  if (error) toast("Failed mutating pipeline: " + error.message);
+  else { toast("Database record synchronized."); await pullStateFromCloud(); }
 }
 
-// --- RENDER LOGIC PIPELINES ---
+// --- DATA MESH RENDER COMPONENT ENGINE ---
 function sw(name){
   const tabs=['dash','profile','jobs','applied','settings','ai'];
   document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.remove('active');if(tabs[i]===name)t.classList.add('active')});
@@ -639,9 +755,9 @@ function toggleAgent(){
 }
 
 function matchColor(m){
-  if(m>=90)return{bg:'rgba(16,185,129,0.15)',col:'#34d399',bd:'#10b981'};
-  if(m>=75)return{bg:'rgba(59,130,246,0.15)',col:'#60a5fa',bd:'#3b82f6'};
-  return{bg:'rgba(245,158,11,0.15)',col:'#fbbf24',bd:'#f59e0b'};
+  if(m>=90)return{bg:'rgba(16,185,129,0.15)',col:#34d399,bd:'#10b981'};
+  if(m>=75)return{bg:'rgba(99,102,241,0.15)',col:#a5b4fc,bd:'#6366f1'};
+  return{bg:'rgba(245,158,11,0.15)',col:#fbbf24,bd:'#f59e0b'};
 }
 
 function renderDash(){
