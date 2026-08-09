@@ -821,7 +821,7 @@ function renderDash(){
         <div class="jc-bot" style="margin-top:10px">
           <span style="font-size:11px;color:var(--color-text-secondary)">${j.type || 'Full-time'}</span>
           <div style="display:flex;gap:6px">
-            <button onclick="approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ✓</button>
+            <button onclick="window.open('${j.apply_url || '#'}', '_blank'); approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ↗</button>
             <button onclick="skipJob(${j.id})" style="font-size:11px;padding:4px 10px">Skip</button>
           </div>
         </div>
@@ -850,7 +850,7 @@ function renderJobs(){
       <div class="jc-bot" style="margin-top:12px">
         <span style="font-size:11px;color:var(--color-text-secondary)">${j.location || 'Remote'} · ${j.type || 'Full-time'}</span>
         <div style="display:flex;gap:6px">
-          <button onclick="approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ✓</button>
+          <button onclick="window.open('${j.apply_url || '#'}', '_blank'); approveJob(${j.id})" style="font-size:11px;padding:4px 10px" class="bp">Apply ↗</button>
           <button onclick="skipJob(${j.id})" style="font-size:11px;padding:4px 10px">Skip</button>
         </div>
       </div>
