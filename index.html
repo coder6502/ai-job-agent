@@ -908,6 +908,9 @@ function addJobPrompt(){
 async function simulateScan() {
   toast('Scanning live job boards...');
   try {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+
     const response = await fetch('/api/scan-jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -915,7 +918,8 @@ async function simulateScan() {
         userId: currentUserInstance.id,
         profile: state.profile,
         supabaseUrl: SUPABASE_URL,
-        supabaseKey: SUPABASE_ANON_KEY
+        supabaseKey: SUPABASE_ANON_KEY,
+        accessToken: accessToken
       })
     });
     const data = await response.json();
