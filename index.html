@@ -929,7 +929,46 @@ function doChat(){
   const inp=document.getElementById('chat-in'); const q=inp.value.trim(); if(!q)return;
   sendPrompt(q); inp.value='';
 }
-function sendPrompt(p){toast('Instruction sent.');}
+async function sendPrompt(p) {
+  const chatMsgs = document.getElementById('chat-msgs');
+  if (!chatMsgs) return;
+
+  const userBubble = document.createElement('div');
+  userBubble.className = 'u-box';
+  userBubble.textContent = p;
+  chatMsgs.appendChild(userBubble);
+
+  const loadingBubble = document.createElement('div');
+  loadingBubble.className = 'ai-box';
+  loadingBubble.textContent = 'Thinking...';
+  chatMsgs.appendChild(loadingBubble);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: p,
+        profile: state.profile || null
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      loadingBubble.textContent = 'Error: ' + (data.error || 'Something went wrong.');
+      return;
+    }
+
+    loadingBubble.textContent = data.reply;
+  } catch (err) {
+    loadingBubble.textContent = 'Network error — could not reach AI service.';
+    console.error(err);
+  }
+
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
 </script>
 </body>
 </html>
