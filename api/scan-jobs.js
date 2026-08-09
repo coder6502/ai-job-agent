@@ -132,12 +132,13 @@ export default async function handler(req, res) {
       source: j.source
     }));
 
+    const { accessToken } = req.body;
     const insertRes = await fetch(`${supabaseUrl}/rest/v1/user_jobs`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
+        'Authorization': `Bearer ${accessToken || supabaseKey}`,
         'Prefer': 'return=minimal'
       },
       body: JSON.stringify(rows)
