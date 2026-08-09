@@ -637,7 +637,8 @@ async function pullProfileFromCloud() {
     .eq('id', currentUserInstance.id)
     .single();
     
-  if (!error && data) {
+   if (!error && data) {
+    state.profile = data;
     document.getElementById('p-name').value = data.name || '';
     document.getElementById('p-email').value = data.email || '';
     document.getElementById('p-phone').value = data.phone || '';
@@ -685,7 +686,8 @@ async function saveProfile() {
   const { error } = await supabaseClient.from('profiles').upsert(profilePayload);
   if (error) {
     toast("Profile sync failure: " + error.message);
-  } else {
+   } else {
+    state.profile = profilePayload;
     toast("Profile locked and updated.");
     state.agentLog.unshift({
       type: 'system',
