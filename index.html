@@ -905,7 +905,27 @@ function renderApplied(){
 function addJobPrompt(){
   const f = document.getElementById('add-job-form'); if(f) f.style.display = f.style.display==='none'?'block':'none';
 }
-function simulateScan(){ toast('Scanning networks...'); pullStateFromCloud(); }
+async function simulateScan() {
+  toast('Scanning live job boards...');
+  try {
+    const response = await fetch('/api/scan-jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUserInstance.id,
+        profile: state.profile,
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_ANON_KEY
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) return toast('Scan error: ' + (data.error || 'failed'));
+    toast(`Found ${data.inserted || 0} new matches.`);
+    await pullStateFromCloud();
+  } catch (err) {
+    toast('Scan failed — network error.');
+  }
+}
 function addTag(inId,listId,key){
   const inp=document.getElementById(inId); const val=inp.value.trim(); if(!val)return;
   if(!state[key])state[key]=[]; if(state[key].includes(val)) return toast('Duplicate entries dropped.');
