@@ -76,7 +76,29 @@ async function fetchAdzunaJobs(profile) {
     }
     const data = await res.json();
     console.log(`Adzuna query "${query}" returned ${(data.results || []).length} raw results`);
-    return (data.results || []).map(j => ({
+
+    let results = data.results || [];
+
+    // Fallback: if the combined-skill query returned nothing, retry with just the single top skill
+    if (results.length === 0) {
+      const singleSkill = (profile?.skills || [])[0];
+      if (singleSkill && singleSkill !== query) {
+        const fallbackParams = new URLSearchParams({
+          app_id: ADZUNA_APP_ID,
+          app_key: ADZUNA_APP_KEY,
+          results_per_page: '30',
+          what: singleSkill
+        });
+        const fbRes = await fetch(`https://api.adzuna.com/v1/api/jobs/in/search/1?${fallbackParams.toString()}`);
+        if (fbRes.ok) {
+          const fbData = await fbRes.json();
+          console.log(`Adzuna fallback query "${singleSkill}" returned ${(fbData.results || []).length} raw results`);
+          results = fbData.results || [];
+        }
+      }
+    }
+
+    return results.map(j => ({
       company: j.company?.display_name || 'Unknown',
       role: j.title,
       location: j.location?.display_name || 'India',
@@ -131,7 +153,9 @@ async function fetchJoobleJobs(profile) {
 
 async function fetchGreenhouseJobs(company) {
   try {
-    const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${company}/jobs`);
+    // content=true pulls the FULL job description, not just the title —
+    // without this, skill-matching against Greenhouse jobs was nearly blind.
+    const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${company}/jobs?content=true`);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.jobs || []).map(j => ({
@@ -139,7 +163,7 @@ async function fetchGreenhouseJobs(company) {
       role: j.title,
       location: j.location?.name || 'Not specified',
       apply_url: j.absolute_url,
-      description: j.title,
+      description: (j.content || j.title || '').replace(/<[^>]*>/g, ' '), // strip HTML tags
       source: 'Greenhouse'
     }));
   } catch {
@@ -165,6 +189,27 @@ async function fetchLeverJobs(company) {
   }
 }
 
+const SENIOR_TITLE_PATTERN = /\b(director|vp|vice president|head of|chief|principal|staff engineer|senior manager|general manager|gm\b)\b/i;
+const MID_SENIOR_PATTERN = /\b(lead|manager|senior|sr\.?)\b/i;
+
+// Roughly: is this profile a fresher/early-career candidate?
+function isEarlyCareer(profile) {
+  const gradYear = parseInt(profile?.grad_year, 10);
+  const currentYear = new Date().getFullYear();
+  const roleType = (profile?.role_type || '').toLowerCase();
+  if (roleType.includes('intern')) return true;
+  if (gradYear && gradYear >= currentYear - 1) return true; // graduated last year or graduating soon
+  return false;
+}
+
+function passesSeniorityFilter(job, profile) {
+  if (!isEarlyCareer(profile)) return true; // no restriction for experienced candidates
+  const title = job.role.toLowerCase();
+  if (SENIOR_TITLE_PATTERN.test(title)) return false; // hard exclude: Director/VP/Chief/Principal/Staff
+  if (MID_SENIOR_PATTERN.test(title)) return false; // exclude: Lead/Manager/Senior for freshers
+  return true;
+}
+
 // --- Real per-job scoring: skill overlap against title+description, not a flat bucket ---
 function scoreMatch(job, profile) {
   const skills = (profile?.skills || []).map(s => s.toLowerCase()).filter(Boolean);
@@ -179,17 +224,17 @@ function scoreMatch(job, profile) {
     if (text.includes(skill)) matched += 1;
   });
 
-  const skillCoverage = matched / skills.length; // 0..1
-  let score = Math.round(skillCoverage * 70); // skills carry most of the weight
-
-  if (branch && text.includes(branch.split(' ')[0])) score += 10;
-  if (roleType.includes('intern') && /intern/.test(text)) score += 15;
-  if (roleType.includes('full') && !/intern/.test(text)) score += 10;
-
   // A job with zero skill overlap shouldn't be shown as a "match" at all
   if (matched === 0) return null;
 
-  return Math.min(98, Math.max(30, score));
+  const skillCoverage = matched / skills.length; // 0..1
+  let score = Math.round(skillCoverage * 80); // skills carry most of the weight, no artificial floor
+
+  if (branch && text.includes(branch.split(' ')[0])) score += 8;
+  if (roleType.includes('intern') && /intern/.test(text)) score += 12;
+  if (roleType.includes('full') && !/intern/.test(text)) score += 8;
+
+  return Math.min(98, Math.max(15, score));
 }
 
 export default async function handler(req, res) {
@@ -227,6 +272,10 @@ export default async function handler(req, res) {
       allJobs = allJobs.filter(j => /intern|junior|entry|graduate|new grad/i.test(j.role));
     }
 
+    // Filter out senior roles (Director/VP/Lead/Manager) if this looks like a fresher profile —
+    // a 90% keyword match on a Director role is still the wrong job.
+    allJobs = allJobs.filter(j => passesSeniorityFilter(j, profile));
+
     // Cross-source dedup: Adzuna/Jooble/ATS often surface the exact same posting
     const seenInBatch = new Set();
     allJobs = allJobs.filter(j => {
@@ -236,10 +285,11 @@ export default async function handler(req, res) {
       return true;
     });
 
-    // Score, and drop anything that isn't a genuine skill match
+    // Score, and only keep genuinely strong matches — low scores don't help anyone get hired
+    const MIN_SCORE_THRESHOLD = 40;
     const scored = allJobs
       .map(j => ({ ...j, match_score: scoreMatch(j, profile) }))
-      .filter(j => j.match_score !== null)
+      .filter(j => j.match_score !== null && j.match_score >= MIN_SCORE_THRESHOLD)
       .sort((a, b) => b.match_score - a.match_score)
       .slice(0, 20);
 
