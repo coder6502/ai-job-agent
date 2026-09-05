@@ -7,7 +7,7 @@ const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID;
 const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
 const JOOBLE_API_KEY = process.env.JOOBLE_API_KEY;
 
-// Kept as a secondary source, but now actually filtered — not dumped in raw
+// Kept as a secondary source, but now actually filtered — not dumped in raw.
 // Expanded to cover more companies that actually hire heavily in India.
 const GREENHOUSE_COMPANIES = [
   'stripe', 'airbnb', 'coinbase', 'doordash', 'gitlab', 'figma', 'discord',
@@ -22,12 +22,19 @@ const LEVER_COMPANIES = [
 
 const INDIA_LOCATION_HINTS = [
   'india', 'bengaluru', 'bangalore', 'hyderabad', 'mumbai', 'pune', 'chennai',
-  'delhi', 'gurgaon', 'gurugram', 'noida', 'kolkata', 'ahmedabad', 'remote'
+  'delhi', 'gurgaon', 'gurugram', 'noida', 'kolkata', 'ahmedabad'
 ];
 
 function isIndiaLocation(loc) {
   const l = (loc || '').toLowerCase();
-  return INDIA_LOCATION_HINTS.some(h => l.includes(h));
+  // Bare "remote" is not enough — that let through "Remote, Canada" etc.
+  // Only accept remote if it's explicitly tied to India, or matches a named India city/country.
+  if (INDIA_LOCATION_HINTS.some(h => l.includes(h))) return true;
+  if (l.includes('remote') && (l.includes('india') || l.includes('apac') || l.trim() === 'remote')) {
+    // "remote" alone (no country specified) is ambiguous — treat conservatively as not India
+    return false;
+  }
+  return false;
 }
 
 // --- Build a search query from the user's actual profile ---
@@ -289,7 +296,15 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: 'Supabase insert failed', detail: errText });
     }
 
-    return res.status(200).json({ inserted: newRows.length });
+    return res.status(200).json({
+      inserted: newRows.length,
+      debug: {
+        adzuna_count: adzunaResults.length,
+        jooble_count: joobleResults.length,
+        greenhouse_lever_india_count: secondary.length,
+        scored_count: scored.length
+      }
+    });
   } catch (err) {
     console.error('Scan jobs crash:', err);
     return res.status(500).json({ error: 'Internal server error', detail: err.message });
