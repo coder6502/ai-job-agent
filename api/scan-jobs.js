@@ -38,12 +38,14 @@ function isIndiaLocation(loc) {
 }
 
 // --- Build a search query from the user's actual profile ---
+// Keep this loose: Adzuna/Jooble treat multi-word queries as an AND match,
+// so piling on every skill returns zero results. Use just 1-2 top skills.
 function buildSearchQuery(profile) {
-  const skills = (profile?.skills || []).slice(0, 5); // top 5 skills, keep query focused
+  const skills = (profile?.skills || []).slice(0, 2);
   const branch = profile?.branch || '';
   if (skills.length) return skills.join(' ');
   if (branch) return branch;
-  return 'software engineer'; // last-resort fallback, not a silent generic dump
+  return 'software engineer';
 }
 
 // --- Primary source: Adzuna India, filtered by the user's own skills/role ---
@@ -55,14 +57,14 @@ async function fetchAdzunaJobs(profile) {
 
   const query = buildSearchQuery(profile);
   const isIntern = (profile?.role_type || '').toLowerCase().includes('intern');
-  const locationTerm = (profile?.location || '').split(',')[0]?.trim(); // e.g. "Pune" from "Pune, Maharashtra"
 
+  // Search nationwide first — a narrow city filter (e.g. "Nashik") combined with
+  // an AND-matched skill query often returns zero results even when jobs exist in India broadly.
   const params = new URLSearchParams({
     app_id: ADZUNA_APP_ID,
     app_key: ADZUNA_APP_KEY,
     results_per_page: '30',
     what: query,
-    ...(locationTerm ? { where: locationTerm } : {}),
     ...(isIntern ? { what_phrase: 'intern' } : {})
   });
 
@@ -73,6 +75,7 @@ async function fetchAdzunaJobs(profile) {
       return [];
     }
     const data = await res.json();
+    console.log(`Adzuna query "${query}" returned ${(data.results || []).length} raw results`);
     return (data.results || []).map(j => ({
       company: j.company?.display_name || 'Unknown',
       role: j.title,
@@ -95,7 +98,6 @@ async function fetchJoobleJobs(profile) {
   }
 
   const query = buildSearchQuery(profile);
-  const locationTerm = (profile?.location || '').split(',')[0]?.trim() || 'India';
 
   try {
     const res = await fetch(`https://jooble.org/api/${JOOBLE_API_KEY}`, {
@@ -103,7 +105,7 @@ async function fetchJoobleJobs(profile) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         keywords: query,
-        location: locationTerm,
+        location: 'India',
         page: '1'
       })
     });
@@ -112,6 +114,7 @@ async function fetchJoobleJobs(profile) {
       return [];
     }
     const data = await res.json();
+    console.log(`Jooble query "${query}" returned ${(data.jobs || []).length} raw results`);
     return (data.jobs || []).map(j => ({
       company: j.company || 'Unknown',
       role: j.title,
@@ -283,7 +286,16 @@ export default async function handler(req, res) {
       }));
 
     if (newRows.length === 0) {
-      return res.status(200).json({ inserted: 0, message: 'No new matches — everything found was already in your list.' });
+      return res.status(200).json({
+        inserted: 0,
+        message: 'No new matches — everything found was already in your list.',
+        debug: {
+          adzuna_count: adzunaResults.length,
+          jooble_count: joobleResults.length,
+          greenhouse_lever_india_count: secondary.length,
+          scored_count: scored.length
+        }
+      });
     }
 
     const insertRes = await fetch(`${supabaseUrl}/rest/v1/user_jobs`, {
