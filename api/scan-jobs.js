@@ -243,7 +243,13 @@ export default async function handler(req, res) {
     if (scored.length === 0) {
       return res.status(200).json({
         inserted: 0,
-        message: 'No genuine matches found this scan — try adding more skills or widening your target locations.'
+        message: 'No genuine matches found this scan — try adding more skills or widening your target locations.',
+        debug: {
+          adzuna_count: adzunaResults.length,
+          jooble_count: joobleResults.length,
+          greenhouse_lever_india_count: secondary.length,
+          scored_count: 0
+        }
       });
     }
 
