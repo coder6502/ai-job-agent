@@ -7,7 +7,7 @@ const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID;
 const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
 const JOOBLE_API_KEY = process.env.JOOBLE_API_KEY;
 
-// Kept as a secondary source, but now actually filtered — not dumped in raw.
+// Kept as a secondary source, but now actually filtered — not dumped in raw
 // Expanded to cover more companies that actually hire heavily in India.
 const GREENHOUSE_COMPANIES = [
   'stripe', 'airbnb', 'coinbase', 'doordash', 'gitlab', 'figma', 'discord',
