@@ -905,12 +905,11 @@ function renderApplied(){
 function addJobPrompt(){
   const f = document.getElementById('add-job-form'); if(f) f.style.display = f.style.display==='none'?'block':'none';
 }
-async function simulateScan() {
+  async function simulateScan() {
   toast('Scanning live job boards...');
   try {
     const { data: sessionData } = await supabaseClient.auth.getSession();
     const accessToken = sessionData?.session?.access_token;
-
     const response = await fetch('/api/scan-jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -924,7 +923,12 @@ async function simulateScan() {
     });
     const data = await response.json();
     if (!response.ok) return toast('Scan error: ' + (data.error || 'failed'));
-    toast(`Found ${data.inserted || 0} new matches.`);
+    if (data.debug) {
+      const d = data.debug;
+      toast(`Found ${data.inserted || 0} new. [Adzuna:${d.adzuna_count} Jooble:${d.jooble_count} ATS:${d.greenhouse_lever_india_count} Scored:${d.scored_count}]`);
+    } else {
+      toast(data.message ? data.message : `Found ${data.inserted || 0} new matches.`);
+    }
     await pullStateFromCloud();
   } catch (err) {
     toast('Scan failed — network error.');
