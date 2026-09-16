@@ -3,6 +3,10 @@
 // with Greenhouse/Lever as a secondary source filtered to India + skill relevance.
 // Deduplicates against jobs already saved for this user before inserting.
 
+export const config = {
+  maxDuration: 30 // give the multi-query search + link-liveness check enough headroom
+};
+
 const ADZUNA_APP_ID = process.env.ADZUNA_APP_ID;
 const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY;
 const JOOBLE_API_KEY = process.env.JOOBLE_API_KEY;
@@ -37,15 +41,49 @@ function isIndiaLocation(loc) {
   return false;
 }
 
-// --- Build a search query from the user's actual profile ---
-// Keep this loose: Adzuna/Jooble treat multi-word queries as an AND match,
-// so piling on every skill returns zero results. Use just 1-2 top skills.
-function buildSearchQuery(profile) {
-  const skills = (profile?.skills || []).slice(0, 2);
-  const branch = profile?.branch || '';
-  if (skills.length) return skills.join(' ');
-  if (branch) return branch;
-  return 'software engineer';
+// Broad domain names don't appear literally in job descriptions ("Data Analytics" as a phrase
+// is rare even in genuine data analytics postings) — expand them into the real technical terms
+// recruiters and job descriptions actually use, for both searching and scoring.
+const DOMAIN_KEYWORD_MAP = {
+  'web developer': ['html', 'css', 'javascript', 'react', 'node.js', 'frontend', 'backend'],
+  'web development': ['html', 'css', 'javascript', 'react', 'node.js', 'frontend', 'backend'],
+  'data analytics': ['sql', 'excel', 'power bi', 'tableau', 'data analysis', 'pandas'],
+  'data analyst': ['sql', 'excel', 'power bi', 'tableau', 'data analysis', 'pandas'],
+  'data science': ['python', 'machine learning', 'pandas', 'numpy', 'scikit-learn', 'statistics'],
+  'data engineering': ['sql', 'etl', 'spark', 'airflow', 'python', 'data pipeline'],
+  'data engineer': ['sql', 'etl', 'spark', 'airflow', 'python', 'data pipeline']
+};
+
+// Expand a raw skills list into a richer set of matchable keywords
+function expandSkillKeywords(skills) {
+  const expanded = new Set();
+  (skills || []).forEach(s => {
+    const lower = s.toLowerCase().trim();
+    expanded.add(lower);
+    if (DOMAIN_KEYWORD_MAP[lower]) {
+      DOMAIN_KEYWORD_MAP[lower].forEach(k => expanded.add(k));
+    }
+  });
+  return Array.from(expanded);
+}
+
+// --- Build search queries from the user's actual profile ---
+// Returns an ARRAY of queries — one per distinct skill/domain — so a multi-domain
+// profile (e.g. Web Dev + Data Science) searches each path properly instead of
+// mashing everything into one over-restrictive AND query.
+function buildSearchQueries(profile) {
+  const rawSkills = (profile?.skills || []).slice(0, 5);
+  if (rawSkills.length === 0) {
+    return [profile?.branch || 'software engineer'];
+  }
+  // One query per raw skill/domain tag, using its expanded keywords (max 2 words per query)
+  return rawSkills.map(skill => {
+    const lower = skill.toLowerCase().trim();
+    if (DOMAIN_KEYWORD_MAP[lower]) {
+      return DOMAIN_KEYWORD_MAP[lower].slice(0, 2).join(' ');
+    }
+    return skill;
+  });
 }
 
 // --- Primary source: Adzuna India, filtered by the user's own skills/role ---
@@ -55,61 +93,41 @@ async function fetchAdzunaJobs(profile) {
     return [];
   }
 
-  const query = buildSearchQuery(profile);
+  const queries = buildSearchQueries(profile);
   const isIntern = (profile?.role_type || '').toLowerCase().includes('intern');
 
-  // Search nationwide first — a narrow city filter (e.g. "Nashik") combined with
-  // an AND-matched skill query often returns zero results even when jobs exist in India broadly.
-  const params = new URLSearchParams({
-    app_id: ADZUNA_APP_ID,
-    app_key: ADZUNA_APP_KEY,
-    results_per_page: '30',
-    what: query,
-    ...(isIntern ? { what_phrase: 'intern' } : {})
-  });
-
-  try {
-    const res = await fetch(`https://api.adzuna.com/v1/api/jobs/in/search/1?${params.toString()}`);
-    if (!res.ok) {
-      console.error('Adzuna API error:', await res.text());
+  const runQuery = async (query) => {
+    const params = new URLSearchParams({
+      app_id: ADZUNA_APP_ID,
+      app_key: ADZUNA_APP_KEY,
+      results_per_page: '20',
+      what: query,
+      ...(isIntern ? { what_phrase: 'intern' } : {})
+    });
+    try {
+      const res = await fetch(`https://api.adzuna.com/v1/api/jobs/in/search/1?${params.toString()}`);
+      if (!res.ok) {
+        console.error(`Adzuna API error for "${query}":`, await res.text());
+        return [];
+      }
+      const data = await res.json();
+      console.log(`Adzuna query "${query}" returned ${(data.results || []).length} raw results`);
+      return (data.results || []).map(j => ({
+        company: j.company?.display_name || 'Unknown',
+        role: j.title,
+        location: j.location?.display_name || 'India',
+        apply_url: j.redirect_url,
+        description: j.description || '',
+        source: 'Adzuna'
+      }));
+    } catch (err) {
+      console.error(`Adzuna fetch failed for "${query}":`, err);
       return [];
     }
-    const data = await res.json();
-    console.log(`Adzuna query "${query}" returned ${(data.results || []).length} raw results`);
+  };
 
-    let results = data.results || [];
-
-    // Fallback: if the combined-skill query returned nothing, retry with just the single top skill
-    if (results.length === 0) {
-      const singleSkill = (profile?.skills || [])[0];
-      if (singleSkill && singleSkill !== query) {
-        const fallbackParams = new URLSearchParams({
-          app_id: ADZUNA_APP_ID,
-          app_key: ADZUNA_APP_KEY,
-          results_per_page: '30',
-          what: singleSkill
-        });
-        const fbRes = await fetch(`https://api.adzuna.com/v1/api/jobs/in/search/1?${fallbackParams.toString()}`);
-        if (fbRes.ok) {
-          const fbData = await fbRes.json();
-          console.log(`Adzuna fallback query "${singleSkill}" returned ${(fbData.results || []).length} raw results`);
-          results = fbData.results || [];
-        }
-      }
-    }
-
-    return results.map(j => ({
-      company: j.company?.display_name || 'Unknown',
-      role: j.title,
-      location: j.location?.display_name || 'India',
-      apply_url: j.redirect_url,
-      description: j.description || '',
-      source: 'Adzuna'
-    }));
-  } catch (err) {
-    console.error('Adzuna fetch failed:', err);
-    return [];
-  }
+  const allResults = await Promise.all(queries.map(runQuery));
+  return allResults.flat();
 }
 
 // --- Secondary primary source: Jooble, aggregates LinkedIn/Naukri/Indeed/company sites ---
@@ -119,36 +137,37 @@ async function fetchJoobleJobs(profile) {
     return [];
   }
 
-  const query = buildSearchQuery(profile);
+  const queries = buildSearchQueries(profile);
 
-  try {
-    const res = await fetch(`https://jooble.org/api/${JOOBLE_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        keywords: query,
-        location: 'India',
-        page: '1'
-      })
-    });
-    if (!res.ok) {
-      console.error('Jooble API error:', await res.text());
+  const runQuery = async (query) => {
+    try {
+      const res = await fetch(`https://jooble.org/api/${JOOBLE_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywords: query, location: 'India', page: '1' })
+      });
+      if (!res.ok) {
+        console.error(`Jooble API error for "${query}":`, await res.text());
+        return [];
+      }
+      const data = await res.json();
+      console.log(`Jooble query "${query}" returned ${(data.jobs || []).length} raw results`);
+      return (data.jobs || []).map(j => ({
+        company: j.company || 'Unknown',
+        role: j.title,
+        location: j.location || 'India',
+        apply_url: j.link,
+        description: j.snippet || '',
+        source: 'Jooble'
+      }));
+    } catch (err) {
+      console.error(`Jooble fetch failed for "${query}":`, err);
       return [];
     }
-    const data = await res.json();
-    console.log(`Jooble query "${query}" returned ${(data.jobs || []).length} raw results`);
-    return (data.jobs || []).map(j => ({
-      company: j.company || 'Unknown',
-      role: j.title,
-      location: j.location || 'India',
-      apply_url: j.link,
-      description: j.snippet || '',
-      source: 'Jooble'
-    }));
-  } catch (err) {
-    console.error('Jooble fetch failed:', err);
-    return [];
-  }
+  };
+
+  const allResults = await Promise.all(queries.map(runQuery));
+  return allResults.flat();
 }
 
 async function fetchGreenhouseJobs(company) {
@@ -191,6 +210,7 @@ async function fetchLeverJobs(company) {
 
 const SENIOR_TITLE_PATTERN = /\b(director|vp|vice president|head of|chief|principal|staff engineer|senior manager|general manager|gm\b)\b/i;
 const MID_SENIOR_PATTERN = /\b(lead|manager|senior|sr\.?)\b/i;
+const EXPERIENCE_PATTERN = /(\d+)\s*\+?\s*(?:to\s*\d+\s*)?years?\s*(?:of)?\s*experience/i;
 
 // Roughly: is this profile a fresher/early-career candidate?
 function isEarlyCareer(profile) {
@@ -210,7 +230,91 @@ function passesSeniorityFilter(job, profile) {
   return true;
 }
 
-// --- Real per-job scoring: skill overlap against title+description, not a flat bucket ---
+// Exclude jobs whose description explicitly demands more years than a fresher realistically has
+function passesExperienceFilter(job, profile) {
+  if (!isEarlyCareer(profile)) return true; // no restriction for experienced candidates
+  const text = `${job.role} ${job.description || ''}`;
+  const match = text.match(EXPERIENCE_PATTERN);
+  if (!match) return true; // no explicit requirement stated — don't penalize
+  const requiredYears = parseInt(match[1], 10);
+  return requiredYears <= 1; // freshers/interns realistically qualify for 0-1 year requirements
+}
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// --- AI-powered scoring: ask Gemini to genuinely assess fit, not just count keyword hits ---
+// Sends the whole shortlist in ONE call (not one call per job) to stay fast and cheap.
+async function scoreWithAI(jobs, profile) {
+  if (!GEMINI_API_KEY || jobs.length === 0) return null; // caller falls back to keyword scoring
+
+  const profileSummary = `
+Skills: ${(profile?.skills || []).join(', ') || 'none listed'}
+Branch/Field: ${profile?.branch || 'not specified'}
+Degree: ${profile?.degree || 'not specified'}
+Graduation year: ${profile?.grad_year || 'not specified'}
+Looking for: ${profile?.role_type || 'not specified'}
+Resume summary: ${profile?.summary || 'not provided'}
+`.trim();
+
+  const jobList = jobs.map((j, i) => `
+[${i}] Company: ${j.company}
+Title: ${j.role}
+Location: ${j.location}
+Description excerpt: ${(j.description || '').slice(0, 500)}
+`).join('\n');
+
+  const prompt = `You are an expert technical recruiter. Score how well this candidate genuinely fits EACH job below, from 0-100, based on real qualification fit — matching skills, experience level, and role type. Be honest and critical: a job requiring skills or experience the candidate clearly lacks should score low (below 40), even if some words overlap. A job that's a strong genuine fit should score high (70+).
+
+CANDIDATE PROFILE:
+${profileSummary}
+
+JOBS:
+${jobList}
+
+Respond with ONLY a JSON array, no other text, in this exact format:
+[{"index": 0, "score": 72, "reason": "short reason"}, {"index": 1, "score": 35, "reason": "short reason"}]`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      }
+    );
+    if (!res.ok) {
+      console.error('Gemini scoring API error:', await res.text());
+      return null;
+    }
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    return parsed; // [{index, score, reason}, ...]
+  } catch (err) {
+    console.error('Gemini scoring failed:', err);
+    return null;
+  }
+}
+// Only run on the final shortlist (not the full raw pool) to stay within serverless time limits.
+async function filterLiveLinks(jobs) {
+  const checks = jobs.map(async (job) => {
+    if (!job.apply_url) return { job, alive: true }; // no URL to check, don't block it
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(job.apply_url, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
+      clearTimeout(timeout);
+      return { job, alive: res.status < 400 };
+    } catch {
+      // Some job boards block HEAD requests entirely — don't punish those, only confirmed 404s
+      return { job, alive: true };
+    }
+  });
+  const results = await Promise.all(checks);
+  return results.filter(r => r.alive).map(r => r.job);
+}
 function scoreMatch(job, profile) {
   const skills = (profile?.skills || []).map(s => s.toLowerCase()).filter(Boolean);
   const roleType = (profile?.role_type || '').toLowerCase();
@@ -276,6 +380,10 @@ export default async function handler(req, res) {
     // a 90% keyword match on a Director role is still the wrong job.
     allJobs = allJobs.filter(j => passesSeniorityFilter(j, profile));
 
+    // Filter out jobs explicitly demanding years of experience a fresher doesn't have,
+    // even if the title itself looked entry-level.
+    allJobs = allJobs.filter(j => passesExperienceFilter(j, profile));
+
     // Cross-source dedup: Adzuna/Jooble/ATS often surface the exact same posting
     const seenInBatch = new Set();
     allJobs = allJobs.filter(j => {
@@ -285,13 +393,49 @@ export default async function handler(req, res) {
       return true;
     });
 
-    // Score, and only keep genuinely strong matches — low scores don't help anyone get hired
+    // First pass: cheap keyword pre-filter to cut the pool down to a manageable size
+    // before spending an AI call on genuine qualification assessment.
+    const prefiltered = allJobs
+      .map(j => ({ ...j, keyword_score: scoreMatch(j, profile) }))
+      .filter(j => j.keyword_score !== null)
+      .sort((a, b) => b.keyword_score - a.keyword_score)
+      .slice(0, 25); // keep the AI call fast — top 25 keyword-plausible candidates
+
+    if (prefiltered.length === 0) {
+      return res.status(200).json({
+        inserted: 0,
+        message: 'No genuine matches found this scan — try adding more skills or widening your target locations.',
+        debug: {
+          adzuna_count: adzunaResults.length,
+          jooble_count: joobleResults.length,
+          greenhouse_lever_india_count: secondary.length,
+          scored_count: 0
+        }
+      });
+    }
+
+    // Second pass: real AI assessment of genuine fit (skills, experience, qualifications)
+    const aiResults = await scoreWithAI(prefiltered, profile);
+
     const MIN_SCORE_THRESHOLD = 40;
-    const scored = allJobs
-      .map(j => ({ ...j, match_score: scoreMatch(j, profile) }))
-      .filter(j => j.match_score !== null && j.match_score >= MIN_SCORE_THRESHOLD)
-      .sort((a, b) => b.match_score - a.match_score)
-      .slice(0, 20);
+    let scored;
+    if (aiResults && Array.isArray(aiResults)) {
+      scored = aiResults
+        .map(r => {
+          const job = prefiltered[r.index];
+          if (!job) return null;
+          return { ...job, match_score: Math.round(r.score), match_reason: r.reason };
+        })
+        .filter(j => j !== null && j.match_score >= MIN_SCORE_THRESHOLD)
+        .sort((a, b) => b.match_score - a.match_score)
+        .slice(0, 20);
+    } else {
+      // Fallback: AI unavailable or failed — use the keyword score already computed
+      scored = prefiltered
+        .filter(j => j.keyword_score >= MIN_SCORE_THRESHOLD)
+        .map(j => ({ ...j, match_score: j.keyword_score }))
+        .slice(0, 20);
+    }
 
     if (scored.length === 0) {
       return res.status(200).json({
@@ -302,6 +446,22 @@ export default async function handler(req, res) {
           jooble_count: joobleResults.length,
           greenhouse_lever_india_count: secondary.length,
           scored_count: 0
+        }
+      });
+    }
+
+    // Drop dead/expired links before showing anyone a job they can't actually apply to
+    const liveScored = await filterLiveLinks(scored);
+
+    if (liveScored.length === 0) {
+      return res.status(200).json({
+        inserted: 0,
+        message: 'Found matches but all their application links were expired — try scanning again shortly.',
+        debug: {
+          adzuna_count: adzunaResults.length,
+          jooble_count: joobleResults.length,
+          greenhouse_lever_india_count: secondary.length,
+          scored_count: scored.length
         }
       });
     }
@@ -321,7 +481,7 @@ export default async function handler(req, res) {
       existing.map(e => (e.apply_url || `${e.company}|${e.role}`).toLowerCase())
     );
 
-    const newRows = scored
+    const newRows = liveScored
       .filter(j => !existingKeys.has((j.apply_url || `${j.company}|${j.role}`).toLowerCase()))
       .map(j => ({
         user_id: userId,
@@ -370,7 +530,8 @@ export default async function handler(req, res) {
         adzuna_count: adzunaResults.length,
         jooble_count: joobleResults.length,
         greenhouse_lever_india_count: secondary.length,
-        scored_count: scored.length
+        scored_count: scored.length,
+        ai_scoring_used: !!(aiResults && Array.isArray(aiResults))
       }
     });
   } catch (err) {
