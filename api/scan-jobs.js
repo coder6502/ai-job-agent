@@ -255,8 +255,17 @@ async function fetchLeverJobs(company) {
 }
 
 const SENIOR_TITLE_PATTERN = /\b(director|vp|vice president|head of|chief|principal|staff|senior manager|general manager|gm\b|solutions architect|solution architect|architect)\b/i;
-const MID_SENIOR_PATTERN = /\b(lead|manager|senior|sr\.?)\b/i;
+const MID_SENIOR_PATTERN = /\b(lead|manager|senior|sr\.?|(sde|swe|sde-|engineer)\s*(ii|iii|iv|v)\b|\b(ii|iii|iv)\s*$)/i;
 const EXPERIENCE_PATTERN = /(\d+)\s*\+?\s*(?:to\s*\d+\s*)?years?\s*(?:of)?\s*experience/i;
+
+// Greenhouse/Lever list companies wholesale — including non-engineering departments
+// (Finance, Legal, HR, Operations) that have nothing to do with a tech-track profile.
+const NON_TECH_DEPARTMENT_PATTERN = /\b(financial analyst|legal entity|legal counsel|controller|accounting|accountant|tax\b|payroll|recruiter|recruiting|talent acquisition|hr business partner|human resources|contracting operations|procurement|compliance officer|paralegal|litigation)\b/i;
+
+function passesNonTechDepartmentFilter(job, profile) {
+  if (!isTechProfile(profile)) return true; // only applies when we expect engineering/tech roles
+  return !NON_TECH_DEPARTMENT_PATTERN.test(job.role.toLowerCase());
+}
 
 // Roughly: is this profile a fresher/early-career candidate?
 function isEarlyCareer(profile) {
@@ -299,6 +308,8 @@ Branch/Field: ${profile?.branch || 'not specified'}
 Degree: ${profile?.degree || 'not specified'}
 Graduation year: ${profile?.grad_year || 'not specified'}
 Looking for: ${profile?.role_type || 'not specified'}
+Current location: ${profile?.location || 'not specified'}
+Work mode preference: ${profile?.work_mode || 'not specified'}
 Resume summary: ${profile?.summary || 'not provided'}
 `.trim();
 
@@ -309,7 +320,12 @@ Location: ${j.location}
 Description excerpt: ${(j.description || '').slice(0, 500)}
 `).join('\n');
 
-  const prompt = `You are an expert technical recruiter. Score how well this candidate genuinely fits EACH job below, from 0-100, based on real qualification fit — matching skills, experience level, and role type. Be honest and critical: a job requiring skills or experience the candidate clearly lacks should score low (below 40), even if some words overlap. A job that's a strong genuine fit should score high (70+).
+  const prompt = `You are an expert recruiter across ALL industries (not just tech) — the candidate below may be in engineering, commerce, healthcare, sales, or any other field. Score how well this candidate genuinely fits EACH job below, from 0-100, based on real qualification fit. Weigh ALL of the following, not just isolated keyword overlap:
+1. Skills/qualifications actually required vs what the candidate has
+2. Experience level required vs the candidate's career stage (a "III"/"Senior"/"Staff" title needs more experience than a fresher has)
+3. Whether the job's department/function genuinely matches the candidate's field (e.g. a Finance or Legal role is a bad fit for an engineering candidate even at a tech company, and vice versa)
+4. Location fit: if the job's location is far from the candidate's current location and their work-mode preference isn't remote/flexible, penalize the score — a strong skills match in a city they can't realistically relocate to or commute to is NOT a perfect match
+Be honest and critical: a job that's a poor fit on ANY of these dimensions should score low (below 40), even if some words overlap. Only a job that's genuinely realistic across skills, experience, department, AND location should score high (70+).
 
 CANDIDATE PROFILE:
 ${profileSummary}
@@ -403,6 +419,26 @@ async function filterLiveLinks(jobs) {
   const results = await Promise.all(checks);
   return results.filter(r => r.alive).map(r => r.job);
 }
+// Score how well a job's location fits the user's stated location/work-mode preference.
+// Returns a signed adjustment — real distance mismatch should lower an otherwise-good match,
+// not just be ignored the way it was before.
+function locationFitAdjustment(job, profile) {
+  const workMode = (profile?.work_mode || '').toLowerCase();
+  const userCity = (profile?.location || '').split(',')[0]?.trim().toLowerCase();
+  const jobLoc = (job.location || '').toLowerCase();
+
+  if (!userCity) return 0; // no stated location — can't judge proximity, stay neutral
+  if (workMode.includes('any')) return 0; // user explicitly said location doesn't matter
+
+  const jobIsRemote = /remote/.test(jobLoc);
+  if (jobIsRemote && (workMode.includes('remote') || workMode.includes('any') || !workMode)) return 6; // good fit
+  if (jobLoc.includes(userCity)) return 10; // job is in the user's own city — strong real fit
+
+  // Job is in a different, specific city and the user didn't say remote/any — real mismatch
+  if (workMode.includes('on-site') || workMode.includes('hybrid')) return -15;
+  return -8; // milder penalty when work-mode preference wasn't specified
+}
+
 function scoreMatch(job, profile) {
   const skills = expandSkillKeywords((profile?.skills || []).filter(Boolean)); // "Data Analytics" → sql, excel, power bi, etc.
   const roleType = (profile?.role_type || '').toLowerCase();
@@ -425,8 +461,9 @@ function scoreMatch(job, profile) {
   if (branch && text.includes(branch.split(' ')[0])) score += 8;
   if (roleType.includes('intern') && /intern/.test(text)) score += 12;
   if (roleType.includes('full') && !/intern/.test(text)) score += 8;
+  score += locationFitAdjustment(job, profile);
 
-  return Math.min(98, Math.max(15, score));
+  return Math.min(98, Math.max(10, score));
 }
 
 export default async function handler(req, res) {
@@ -473,6 +510,10 @@ export default async function handler(req, res) {
     // Filter out jobs explicitly demanding years of experience a fresher doesn't have,
     // even if the title itself looked entry-level.
     allJobs = allJobs.filter(j => passesExperienceFilter(j, profile));
+
+    // Filter out Finance/Legal/HR/Operations postings that leaked in from a tech company's
+    // full job board — irrelevant to a tech-track candidate regardless of keyword overlap.
+    allJobs = allJobs.filter(j => passesNonTechDepartmentFilter(j, profile));
 
     // Cross-source dedup: Adzuna/Jooble/ATS often surface the exact same posting
     const seenInBatch = new Set();
