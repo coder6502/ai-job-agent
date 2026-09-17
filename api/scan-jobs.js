@@ -54,6 +54,24 @@ const DOMAIN_KEYWORD_MAP = {
   'data engineer': ['sql', 'etl', 'spark', 'airflow', 'python', 'data pipeline']
 };
 
+// Fuzzy-match a tag against known domain keys — handles typos like "Web Deveploper" / "Data Enginerring"
+// by checking if enough characters overlap in sequence (cheap substitute for edit-distance).
+function fuzzyMatchDomainKey(tag) {
+  const words = tag.split(/\s+/);
+  for (const key of Object.keys(DOMAIN_KEYWORD_MAP)) {
+    const keyWords = key.split(/\s+/);
+    if (keyWords.length !== words.length) continue;
+    const closeEnough = keyWords.every((kw, i) => {
+      const w = words[i] || '';
+      if (kw === w) return true;
+      // Same starting 4 chars is a decent typo-tolerant heuristic for these short domain words
+      return kw.length >= 4 && w.length >= 4 && kw.slice(0, 4) === w.slice(0, 4);
+    });
+    if (closeEnough) return key;
+  }
+  return null;
+}
+
 // Expand a raw skills list into a richer set of matchable keywords
 function expandSkillKeywords(skills) {
   const expanded = new Set();
@@ -62,6 +80,9 @@ function expandSkillKeywords(skills) {
     expanded.add(lower);
     if (DOMAIN_KEYWORD_MAP[lower]) {
       DOMAIN_KEYWORD_MAP[lower].forEach(k => expanded.add(k));
+    } else {
+      const fuzzyKey = fuzzyMatchDomainKey(lower);
+      if (fuzzyKey) DOMAIN_KEYWORD_MAP[fuzzyKey].forEach(k => expanded.add(k));
     }
   });
   return Array.from(expanded);
@@ -80,6 +101,10 @@ function buildSearchQueries(profile) {
     const lower = skill.toLowerCase().trim();
     if (DOMAIN_KEYWORD_MAP[lower]) {
       return DOMAIN_KEYWORD_MAP[lower].slice(0, 2).join(' ');
+    }
+    const fuzzyKey = fuzzyMatchDomainKey(lower);
+    if (fuzzyKey) {
+      return DOMAIN_KEYWORD_MAP[fuzzyKey].slice(0, 2).join(' ');
     }
     return skill;
   });
@@ -354,7 +379,7 @@ async function filterLiveLinks(jobs) {
   return results.filter(r => r.alive).map(r => r.job);
 }
 function scoreMatch(job, profile) {
-  const skills = (profile?.skills || []).map(s => s.toLowerCase()).filter(Boolean);
+  const skills = expandSkillKeywords((profile?.skills || []).filter(Boolean)); // "Data Analytics" → sql, excel, power bi, etc.
   const roleType = (profile?.role_type || '').toLowerCase();
   const branch = (profile?.branch || '').toLowerCase();
   const text = `${job.role} ${job.description || ''}`.toLowerCase();
