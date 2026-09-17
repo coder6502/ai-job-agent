@@ -76,14 +76,16 @@ function buildSearchQueries(profile) {
   if (rawSkills.length === 0) {
     return [profile?.branch || 'software engineer'];
   }
-  // One query per raw skill/domain tag, using its expanded keywords (max 2 words per query)
-  return rawSkills.map(skill => {
+  const queries = rawSkills.map(skill => {
     const lower = skill.toLowerCase().trim();
     if (DOMAIN_KEYWORD_MAP[lower]) {
       return DOMAIN_KEYWORD_MAP[lower].slice(0, 2).join(' ');
     }
     return skill;
   });
+  // Dedupe (different domain tags can map to overlapping keywords) and cap at 3 —
+  // more than that risks hitting Adzuna/Jooble's free-tier rate limits in one scan.
+  return Array.from(new Set(queries)).slice(0, 3);
 }
 
 // --- Primary source: Adzuna India, filtered by the user's own skills/role ---
@@ -275,23 +277,39 @@ Respond with ONLY a JSON array, no other text, in this exact format:
 [{"index": 0, "score": 72, "reason": "short reason"}, {"index": 1, "score": 35, "reason": "short reason"}]`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    // Retry on transient overload (503) — this is Google's servers being busy, not a config error
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          }
+        );
+        if (res.status === 503 || res.status === 429) {
+          lastError = await res.text();
+          console.error(`Gemini overloaded (attempt ${attempt + 1}/3):`, lastError);
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // 1s, 2s backoff
+          continue;
+        }
+        if (!res.ok) {
+          console.error('Gemini scoring API error:', await res.text());
+          return null;
+        }
+        const data = await res.json();
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const cleaned = raw.replace(/```json|```/g, '').trim();
+        return JSON.parse(cleaned);
+      } catch (err) {
+        lastError = err;
+        console.error(`Gemini attempt ${attempt + 1}/3 failed:`, err);
       }
-    );
-    if (!res.ok) {
-      console.error('Gemini scoring API error:', await res.text());
-      return null;
     }
-    const data = await res.json();
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    return parsed; // [{index, score, reason}, ...]
+    console.error('Gemini scoring failed after 3 attempts:', lastError);
+    return null;
   } catch (err) {
     console.error('Gemini scoring failed:', err);
     return null;
