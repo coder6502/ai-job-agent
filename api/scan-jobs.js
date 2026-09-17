@@ -317,11 +317,17 @@ Respond with ONLY a JSON array, no other text, in this exact format. Keep "reaso
             })
           }
         );
-        if (res.status === 503 || res.status === 429) {
+        if (res.status === 503) {
           lastError = await res.text();
           console.error(`Gemini overloaded (attempt ${attempt + 1}/3):`, lastError);
           await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // 1s, 2s backoff
           continue;
+        }
+        if (res.status === 429) {
+          // Daily/rate quota exhausted — retrying won't help within our time budget, fail fast
+          lastError = await res.text();
+          console.error('Gemini quota exhausted, not retrying:', lastError);
+          return null;
         }
         if (!res.ok) {
           console.error('Gemini scoring API error:', await res.text());
@@ -480,7 +486,8 @@ export default async function handler(req, res) {
     // Second pass: real AI assessment of genuine fit (skills, experience, qualifications)
     const aiResults = await scoreWithAI(prefiltered, profile);
 
-    const MIN_SCORE_THRESHOLD = 40;
+    const AI_SCORE_THRESHOLD = 40;
+    const FALLBACK_SCORE_THRESHOLD = 20; // keyword-only scoring is coarser (short Jooble snippets rarely reach 40) — still filters out true zero-relevance jobs since scoreMatch already requires 1+ keyword hit
     let scored;
     if (aiResults && Array.isArray(aiResults)) {
       scored = aiResults
@@ -489,14 +496,15 @@ export default async function handler(req, res) {
           if (!job) return null;
           return { ...job, match_score: Math.round(r.score), match_reason: r.reason };
         })
-        .filter(j => j !== null && j.match_score >= MIN_SCORE_THRESHOLD)
+        .filter(j => j !== null && j.match_score >= AI_SCORE_THRESHOLD)
         .sort((a, b) => b.match_score - a.match_score)
         .slice(0, 20);
     } else {
       // Fallback: AI unavailable or failed — use the keyword score already computed
       scored = prefiltered
-        .filter(j => j.keyword_score >= MIN_SCORE_THRESHOLD)
+        .filter(j => j.keyword_score >= FALLBACK_SCORE_THRESHOLD)
         .map(j => ({ ...j, match_score: j.keyword_score }))
+        .sort((a, b) => b.match_score - a.match_score)
         .slice(0, 20);
     }
 
