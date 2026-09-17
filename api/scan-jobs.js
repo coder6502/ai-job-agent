@@ -24,6 +24,18 @@ const LEVER_COMPANIES = [
   'zeta', 'meesho', 'sprinklr', 'delhivery'
 ];
 
+// Greenhouse/Lever list only tech companies — running them for a non-tech profile
+// (mechanical, commerce, nursing, sales, etc.) just adds irrelevant noise and wastes time.
+// Adzuna/Jooble remain the real general-purpose sources for every field.
+const TECH_SIGNAL_PATTERN = /computer|information technology|\bit\b|software|electronics|programming|developer|engineer(?!ing\s*\(mechanical|ing\s*\(civil)|data science|data analytics|data engineering|web develop/i;
+
+function isTechProfile(profile) {
+  const branch = (profile?.branch || '').toLowerCase();
+  const degree = (profile?.degree || '').toLowerCase();
+  const skills = (profile?.skills || []).join(' ').toLowerCase();
+  return TECH_SIGNAL_PATTERN.test(branch) || TECH_SIGNAL_PATTERN.test(degree) || TECH_SIGNAL_PATTERN.test(skills);
+}
+
 const INDIA_LOCATION_HINTS = [
   'india', 'bengaluru', 'bangalore', 'hyderabad', 'mumbai', 'pune', 'chennai',
   'delhi', 'gurgaon', 'gurugram', 'noida', 'kolkata', 'ahmedabad'
@@ -93,10 +105,13 @@ function expandSkillKeywords(skills) {
 // profile (e.g. Web Dev + Data Science) searches each path properly instead of
 // mashing everything into one over-restrictive AND query.
 function buildSearchQueries(profile) {
-  const rawSkills = (profile?.skills || []).slice(0, 5);
+  const rawSkills = (profile?.skills || []).slice(0, 4);
+  const branch = (profile?.branch || '').trim();
+
   if (rawSkills.length === 0) {
-    return [profile?.branch || 'software engineer'];
+    return [branch || 'entry level'];
   }
+
   const queries = rawSkills.map(skill => {
     const lower = skill.toLowerCase().trim();
     if (DOMAIN_KEYWORD_MAP[lower]) {
@@ -106,10 +121,14 @@ function buildSearchQueries(profile) {
     if (fuzzyKey) {
       return DOMAIN_KEYWORD_MAP[fuzzyKey].slice(0, 2).join(' ');
     }
-    return skill;
+    return skill; // works as-is for any field — nursing, mechanical, commerce, sales, etc.
   });
-  // Dedupe (different domain tags can map to overlapping keywords) and cap at 3 —
-  // more than that risks hitting Adzuna/Jooble's free-tier rate limits in one scan.
+
+  // Branch/field of study is often the strongest search signal for non-tech qualifications
+  // (e.g. "Mechanical Engineering", "B.Com", "Nursing") — include it as its own query.
+  if (branch) queries.push(branch);
+
+  // Dedupe and cap at 3 — more than that risks hitting Adzuna/Jooble's free-tier rate limits.
   return Array.from(new Set(queries)).slice(0, 3);
 }
 
@@ -235,7 +254,7 @@ async function fetchLeverJobs(company) {
   }
 }
 
-const SENIOR_TITLE_PATTERN = /\b(director|vp|vice president|head of|chief|principal|staff engineer|senior manager|general manager|gm\b|solutions architect|solution architect|architect)\b/i;
+const SENIOR_TITLE_PATTERN = /\b(director|vp|vice president|head of|chief|principal|staff|senior manager|general manager|gm\b|solutions architect|solution architect|architect)\b/i;
 const MID_SENIOR_PATTERN = /\b(lead|manager|senior|sr\.?)\b/i;
 const EXPERIENCE_PATTERN = /(\d+)\s*\+?\s*(?:to\s*\d+\s*)?years?\s*(?:of)?\s*experience/i;
 
@@ -427,12 +446,14 @@ export default async function handler(req, res) {
     });
   }
 
+  const runTechSources = isTechProfile(profile);
+
   try {
     const [adzunaResults, joobleResults, greenhouseResults, leverResults] = await Promise.all([
       fetchAdzunaJobs(profile),
       fetchJoobleJobs(profile),
-      Promise.all(GREENHOUSE_COMPANIES.map(fetchGreenhouseJobs)).then(r => r.flat()),
-      Promise.all(LEVER_COMPANIES.map(fetchLeverJobs)).then(r => r.flat())
+      runTechSources ? Promise.all(GREENHOUSE_COMPANIES.map(fetchGreenhouseJobs)).then(r => r.flat()) : Promise.resolve([]),
+      runTechSources ? Promise.all(LEVER_COMPANIES.map(fetchLeverJobs)).then(r => r.flat()) : Promise.resolve([])
     ]);
 
     // Greenhouse/Lever have no location filter built in — enforce India/remote here
@@ -464,11 +485,29 @@ export default async function handler(req, res) {
 
     // First pass: cheap keyword pre-filter to cut the pool down to a manageable size
     // before spending an AI call on genuine qualification assessment.
-    const prefiltered = allJobs
+    // IMPORTANT: don't just take a global top-N by keyword_score — Greenhouse jobs have
+    // full-text descriptions (content=true) and rack up far more keyword hits than Jooble/
+    // Adzuna's short snippets, so a single global ranking lets ATS postings crowd out every
+    // other source entirely. Cap per-source, then merge, so all sources get a fair shot.
+    const scoredAll = allJobs
       .map(j => ({ ...j, keyword_score: scoreMatch(j, profile) }))
-      .filter(j => j.keyword_score !== null)
+      .filter(j => j.keyword_score !== null);
+
+    const bySource = {};
+    scoredAll.forEach(j => {
+      const src = j.source || 'Other';
+      if (!bySource[src]) bySource[src] = [];
+      bySource[src].push(j);
+    });
+    Object.keys(bySource).forEach(src => {
+      bySource[src].sort((a, b) => b.keyword_score - a.keyword_score);
+    });
+
+    const PER_SOURCE_CAP = 6; // e.g. up to 6 from Adzuna, 6 from Jooble, 6 from ATS
+    const prefiltered = Object.values(bySource)
+      .flatMap(list => list.slice(0, PER_SOURCE_CAP))
       .sort((a, b) => b.keyword_score - a.keyword_score)
-      .slice(0, 15); // keep the AI call fast and reduce output-truncation risk
+      .slice(0, 20); // overall cap to keep the AI call fast
 
     if (prefiltered.length === 0) {
       return res.status(200).json({
@@ -487,7 +526,7 @@ export default async function handler(req, res) {
     const aiResults = await scoreWithAI(prefiltered, profile);
 
     const AI_SCORE_THRESHOLD = 40;
-    const FALLBACK_SCORE_THRESHOLD = 20; // keyword-only scoring is coarser (short Jooble snippets rarely reach 40) — still filters out true zero-relevance jobs since scoreMatch already requires 1+ keyword hit
+    const FALLBACK_SCORE_THRESHOLD = 15; // matches scoreMatch's floor — a single keyword hit from a short Jooble snippet is still a real signal worth surfacing
     let scored;
     if (aiResults && Array.isArray(aiResults)) {
       scored = aiResults
