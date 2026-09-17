@@ -210,7 +210,7 @@ async function fetchLeverJobs(company) {
   }
 }
 
-const SENIOR_TITLE_PATTERN = /\b(director|vp|vice president|head of|chief|principal|staff engineer|senior manager|general manager|gm\b)\b/i;
+const SENIOR_TITLE_PATTERN = /\b(director|vp|vice president|head of|chief|principal|staff engineer|senior manager|general manager|gm\b|solutions architect|solution architect|architect)\b/i;
 const MID_SENIOR_PATTERN = /\b(lead|manager|senior|sr\.?)\b/i;
 const EXPERIENCE_PATTERN = /(\d+)\s*\+?\s*(?:to\s*\d+\s*)?years?\s*(?:of)?\s*experience/i;
 
@@ -273,7 +273,7 @@ ${profileSummary}
 JOBS:
 ${jobList}
 
-Respond with ONLY a JSON array, no other text, in this exact format:
+Respond with ONLY a JSON array, no other text, in this exact format. Keep "reason" under 12 words.
 [{"index": 0, "score": 72, "reason": "short reason"}, {"index": 1, "score": 35, "reason": "short reason"}]`;
 
   try {
@@ -286,7 +286,10 @@ Respond with ONLY a JSON array, no other text, in this exact format:
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { maxOutputTokens: 3000, temperature: 0.2 }
+            })
           }
         );
         if (res.status === 503 || res.status === 429) {
@@ -301,8 +304,25 @@ Respond with ONLY a JSON array, no other text, in this exact format:
         }
         const data = await res.json();
         const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const cleaned = raw.replace(/```json|```/g, '').trim();
-        return JSON.parse(cleaned);
+        let cleaned = raw.replace(/```json|```/g, '').trim();
+        // Defensive: if the response got cut off mid-array, salvage whatever complete objects exist
+        try {
+          return JSON.parse(cleaned);
+        } catch (parseErr) {
+          const lastCompleteObj = cleaned.lastIndexOf('}');
+          if (lastCompleteObj > 0) {
+            const salvaged = cleaned.slice(0, lastCompleteObj + 1) + ']';
+            const openBracket = salvaged.indexOf('[');
+            if (openBracket >= 0) {
+              try {
+                return JSON.parse(salvaged.slice(openBracket));
+              } catch {
+                // fall through to attempt-level retry below
+              }
+            }
+          }
+          throw parseErr;
+        }
       } catch (err) {
         lastError = err;
         console.error(`Gemini attempt ${attempt + 1}/3 failed:`, err);
@@ -417,7 +437,7 @@ export default async function handler(req, res) {
       .map(j => ({ ...j, keyword_score: scoreMatch(j, profile) }))
       .filter(j => j.keyword_score !== null)
       .sort((a, b) => b.keyword_score - a.keyword_score)
-      .slice(0, 25); // keep the AI call fast — top 25 keyword-plausible candidates
+      .slice(0, 15); // keep the AI call fast and reduce output-truncation risk
 
     if (prefiltered.length === 0) {
       return res.status(200).json({
