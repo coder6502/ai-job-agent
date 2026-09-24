@@ -177,6 +177,61 @@ async function fetchAdzunaJobs(profile) {
 }
 
 // --- Secondary primary source: Jooble, aggregates LinkedIn/Naukri/Indeed/company sites ---
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+
+// --- Third source: JSearch (via RapidAPI), aggregates Google for Jobs —
+// which itself pulls real postings from LinkedIn, Indeed, Naukri, and company sites.
+async function fetchJSearchJobs(profile) {
+  if (!RAPIDAPI_KEY) {
+    console.error('JSearch credentials missing — set RAPIDAPI_KEY in Vercel env vars');
+    return [];
+  }
+
+  const queries = buildSearchQueries(profile);
+  const isIntern = (profile?.role_type || '').toLowerCase().includes('intern');
+
+  const runQuery = async (query) => {
+    try {
+      const fullQuery = `${query} in India${isIntern ? ' internship' : ''}`;
+      const params = new URLSearchParams({ query: fullQuery, page: '1', num_pages: '1', country: 'in' });
+      const res = await fetch(`https://jsearch.p.rapidapi.com/search?${params.toString()}`, {
+        headers: {
+          'X-RapidAPI-Key': RAPIDAPI_KEY,
+          'X-RapidAPI-Host': 'jsearch.p.rapidapi.com'
+        }
+      });
+      if (!res.ok) {
+        console.error(`JSearch API error for "${query}":`, await res.text());
+        return [];
+      }
+      const data = await res.json();
+      console.log(`JSearch query "${query}" returned ${(data.data || []).length} raw results`);
+      return (data.data || []).map(j => ({
+        company: j.employer_name || 'Unknown',
+        role: j.job_title,
+        location: j.job_city ? `${j.job_city}, ${j.job_state || ''}`.trim() : (j.job_country || 'India'),
+        apply_url: j.job_apply_link,
+        description: j.job_description || '',
+        source: 'JSearch',
+        // Structured signals JSearch provides directly — far more reliable than regex-guessing
+        // from title/description text, used to override the heuristic filters below when present.
+        structured: {
+          seniorityLevel: j.seniority_level || null, // e.g. "entry", "senior"
+          requiredExperienceYears: typeof j.required_experience_years === 'number' ? j.required_experience_years : null,
+          isRemote: typeof j.job_is_remote === 'boolean' ? j.job_is_remote : null,
+          requiredTech: j.required_technologies || []
+        }
+      }));
+    } catch (err) {
+      console.error(`JSearch fetch failed for "${query}":`, err);
+      return [];
+    }
+  };
+
+  const allResults = await Promise.all(queries.map(runQuery));
+  return allResults.flat();
+}
+
 async function fetchJoobleJobs(profile) {
   if (!JOOBLE_API_KEY) {
     console.error('Jooble credentials missing — set JOOBLE_API_KEY in Vercel env vars');
@@ -279,6 +334,11 @@ function isEarlyCareer(profile) {
 
 function passesSeniorityFilter(job, profile) {
   if (!isEarlyCareer(profile)) return true; // no restriction for experienced candidates
+
+  // Trust JSearch's own structured seniority_level field over regex-guessing when it's present
+  const level = job.structured?.seniorityLevel;
+  if (level) return level.toLowerCase() === 'entry' || level.toLowerCase() === 'associate';
+
   const title = job.role.toLowerCase();
   if (SENIOR_TITLE_PATTERN.test(title)) return false; // hard exclude: Director/VP/Chief/Principal/Staff
   if (MID_SENIOR_PATTERN.test(title)) return false; // exclude: Lead/Manager/Senior for freshers
@@ -288,6 +348,11 @@ function passesSeniorityFilter(job, profile) {
 // Exclude jobs whose description explicitly demands more years than a fresher realistically has
 function passesExperienceFilter(job, profile) {
   if (!isEarlyCareer(profile)) return true; // no restriction for experienced candidates
+
+  // Trust JSearch's own structured required_experience_years field when present — exact, not a guess
+  const reqYears = job.structured?.requiredExperienceYears;
+  if (typeof reqYears === 'number') return reqYears <= 1;
+
   const text = `${job.role} ${job.description || ''}`;
   const match = text.match(EXPERIENCE_PATTERN);
   if (!match) return true; // no explicit requirement stated — don't penalize
@@ -430,7 +495,7 @@ function locationFitAdjustment(job, profile) {
   if (!userCity) return 0; // no stated location — can't judge proximity, stay neutral
   if (workMode.includes('any')) return 0; // user explicitly said location doesn't matter
 
-  const jobIsRemote = /remote/.test(jobLoc);
+  const jobIsRemote = job.structured?.isRemote === true || /remote/.test(jobLoc);
   if (jobIsRemote && (workMode.includes('remote') || workMode.includes('any') || !workMode)) return 6; // good fit
   if (jobLoc.includes(userCity)) return 10; // job is in the user's own city — strong real fit
 
@@ -486,9 +551,10 @@ export default async function handler(req, res) {
   const runTechSources = isTechProfile(profile);
 
   try {
-    const [adzunaResults, joobleResults, greenhouseResults, leverResults] = await Promise.all([
+    const [adzunaResults, joobleResults, jsearchResults, greenhouseResults, leverResults] = await Promise.all([
       fetchAdzunaJobs(profile),
       fetchJoobleJobs(profile),
+      fetchJSearchJobs(profile),
       runTechSources ? Promise.all(GREENHOUSE_COMPANIES.map(fetchGreenhouseJobs)).then(r => r.flat()) : Promise.resolve([]),
       runTechSources ? Promise.all(LEVER_COMPANIES.map(fetchLeverJobs)).then(r => r.flat()) : Promise.resolve([])
     ]);
@@ -496,7 +562,7 @@ export default async function handler(req, res) {
     // Greenhouse/Lever have no location filter built in — enforce India/remote here
     const secondary = [...greenhouseResults, ...leverResults].filter(j => isIndiaLocation(j.location));
 
-    let allJobs = [...adzunaResults, ...joobleResults, ...secondary];
+    let allJobs = [...adzunaResults, ...joobleResults, ...jsearchResults, ...secondary];
 
     const isIntern = (profile?.role_type || '').toLowerCase().includes('intern');
     if (isIntern) {
@@ -557,6 +623,7 @@ export default async function handler(req, res) {
         debug: {
           adzuna_count: adzunaResults.length,
           jooble_count: joobleResults.length,
+          jsearch_count: jsearchResults.length,
           greenhouse_lever_india_count: secondary.length,
           scored_count: 0
         }
@@ -595,6 +662,7 @@ export default async function handler(req, res) {
         debug: {
           adzuna_count: adzunaResults.length,
           jooble_count: joobleResults.length,
+          jsearch_count: jsearchResults.length,
           greenhouse_lever_india_count: secondary.length,
           scored_count: 0
         }
@@ -611,6 +679,7 @@ export default async function handler(req, res) {
         debug: {
           adzuna_count: adzunaResults.length,
           jooble_count: joobleResults.length,
+          jsearch_count: jsearchResults.length,
           greenhouse_lever_india_count: secondary.length,
           scored_count: scored.length
         }
@@ -653,6 +722,7 @@ export default async function handler(req, res) {
         debug: {
           adzuna_count: adzunaResults.length,
           jooble_count: joobleResults.length,
+          jsearch_count: jsearchResults.length,
           greenhouse_lever_india_count: secondary.length,
           scored_count: scored.length
         }
@@ -680,6 +750,7 @@ export default async function handler(req, res) {
       debug: {
         adzuna_count: adzunaResults.length,
         jooble_count: joobleResults.length,
+          jsearch_count: jsearchResults.length,
         greenhouse_lever_india_count: secondary.length,
         scored_count: scored.length,
         ai_scoring_used: !!(aiResults && Array.isArray(aiResults))
