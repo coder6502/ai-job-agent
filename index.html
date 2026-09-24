@@ -951,44 +951,67 @@ function doChat(){
   const inp=document.getElementById('chat-in'); const q=inp.value.trim(); if(!q)return;
   sendPrompt(q); inp.value='';
 }
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function formatAiReply(text) {
+  let safe = escapeHtml(text);
+  safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const lines = safe.split('\n');
+  let html = '';
+  let inList = false;
+  for (const line of lines) {
+    const numbered = line.match(/^\d+\.\s+(.*)/);
+    const bulleted = line.match(/^[-*]\s+(.*)/);
+    if (numbered || bulleted) {
+      if (!inList) { html += '<ol>'; inList = true; }
+      html += `<li>${(numbered || bulleted)[1]}</li>`;
+    } else {
+      if (inList) { html += '</ol>'; inList = false; }
+      if (line.trim()) html += `<div>${line}</div>`;
+      else html += '<div style="height:8px"></div>';
+    }
+  }
+  if (inList) html += '</ol>';
+  return html;
+}
+
 async function sendPrompt(p) {
   const chatMsgs = document.getElementById('chat-msgs');
   if (!chatMsgs) return;
 
-  const userBubble = document.createElement('div');
-  userBubble.className = 'u-box';
-  userBubble.textContent = p;
-  chatMsgs.appendChild(userBubble);
+  const userRow = document.createElement('div');
+  userRow.className = 'msg-row user';
+  userRow.innerHTML = `<div class="msg-avatar user">S</div><div class="u-box"></div>`;
+  userRow.querySelector('.u-box').textContent = p;
+  chatMsgs.appendChild(userRow);
 
-  const loadingBubble = document.createElement('div');
-  loadingBubble.className = 'ai-box';
-  loadingBubble.textContent = 'Thinking...';
-  chatMsgs.appendChild(loadingBubble);
+  const aiRow = document.createElement('div');
+  aiRow.className = 'msg-row ai';
+  aiRow.innerHTML = `<div class="msg-avatar ai">✦</div><div class="ai-box">Thinking...</div>`;
+  chatMsgs.appendChild(aiRow);
+  const loadingBubble = aiRow.querySelector('.ai-box');
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: p,
-        profile: state.profile || null
-      })
+      body: JSON.stringify({ message: p, profile: state.profile || null })
     });
-
     const data = await response.json();
-
     if (!response.ok) {
-      loadingBubble.textContent = 'Error: ' + (data.error || 'Something went wrong.');
+      loadingBubble.textContent = data.error || 'Something went wrong.';
       return;
     }
-
-    loadingBubble.textContent = data.reply;
+    loadingBubble.innerHTML = formatAiReply(data.reply);
   } catch (err) {
     loadingBubble.textContent = 'Network error — could not reach AI service.';
     console.error(err);
   }
-
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
 </script>
