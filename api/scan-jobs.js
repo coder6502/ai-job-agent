@@ -187,7 +187,9 @@ async function fetchJSearchJobs(profile) {
     return [];
   }
 
-  const queries = buildSearchQueries(profile);
+  // JSearch's free tier has a much tighter request budget than Adzuna/Jooble —
+  // use only the single strongest query instead of all 3 to avoid burning quota fast.
+  const queries = buildSearchQueries(profile).slice(0, 1);
   const isIntern = (profile?.role_type || '').toLowerCase().includes('intern');
 
   const runQuery = async (query) => {
@@ -634,7 +636,7 @@ export default async function handler(req, res) {
     const aiResults = await scoreWithAI(prefiltered, profile);
 
     const AI_SCORE_THRESHOLD = 40;
-    const FALLBACK_SCORE_THRESHOLD = 15; // matches scoreMatch's floor — a single keyword hit from a short Jooble snippet is still a real signal worth surfacing
+    const FALLBACK_SCORE_THRESHOLD = 10; // matches scoreMatch's actual floor (which can be hit via the location penalty now) — a single keyword hit is still a real signal worth surfacing
     let scored;
     if (aiResults && Array.isArray(aiResults)) {
       scored = aiResults
